@@ -1,0 +1,4 @@
+interface:
+  display_name: "ngh2 Knowledge"
+  short_description: "Verify HTTP/2 and native-binding facts"
+  default_prompt: "Use $ngh2-knowledge to verify this HTTP/2 or native-binding claim from primary sources."

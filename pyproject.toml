@@ -1,0 +1,137 @@
+[build-system]
+requires = ["scikit-build-core>=1.0,<2", "cython>=3.1,<4", "cython-cmake"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "ngh2"
+dynamic = ["version"]
+description = "Sans-I/O HTTP/2 protocol library for Python, backed by libnghttp2"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE", "vendor/nghttp2/COPYING"]
+keywords = ["http", "http2", "nghttp2", "protocol", "sans-io"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Internet :: WWW/HTTP",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Changelog = "https://github.com/cnzakii/ngh2/blob/main/CHANGELOG.md"
+Source = "https://github.com/cnzakii/ngh2"
+Issues = "https://github.com/cnzakii/ngh2/issues"
+
+[[tool.dynamic-metadata]]
+provider = "scikit_build_core.metadata.regex"
+field = "version"
+input = "src/ngh2/_version.py"
+
+[dependency-groups]
+dev = [
+    { include-group = "benchmark" },
+    { include-group = "lint" },
+    { include-group = "test" },
+]
+lint = [
+    "cython-lint>=0.21,<0.22",
+    "pre-commit>=4,<5",
+    "ruff>=0.15.22,<0.16",
+    "ty>=0.0.60,<0.1",
+]
+test = [
+    "h2>=4.3,<5",
+    "pytest>=9.0,<10",
+]
+benchmark = [
+    "pyperf>=2.10,<3",
+]
+coverage = [
+    "coverage>=7,<8",
+    "cython>=3.1,<4",
+]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+sdist.include = ["vendor/nghttp2/**", "!vendor/nghttp2/.git"]
+wheel.exclude = ["**/*.pxd", "**/*.pyx"]
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-* cp314-* cp315-* cp314t-* cp315t-*"
+skip = ["*-win32", "*-musllinux_*"]
+test-command = 'pytest {project}/tests -m "not h2spec"'
+test-groups = ["test"]
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "src/ngh2/_version.py" },
+    { file = "src/**/*.{h,c,pyx,pxd}" },
+    { file = "vendor/nghttp2/**/*.{c,h,cmake,txt}" },
+    { file = "CMakeLists.txt" },
+]
+
+[tool.ruff]
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle: import, statement, and syntax errors.
+    "E4",
+    "E7",
+    "E9",
+    # Pyflakes: undefined names, unused imports, and related errors.
+    "F",
+    # isort: import grouping and ordering.
+    "I",
+    # pyupgrade: syntax supported by the minimum Python version.
+    "UP",
+    # flake8-bugbear: likely bugs and fragile patterns.
+    "B",
+    # flake8-comprehensions: unnecessary or suboptimal comprehensions.
+    "C4",
+    # flake8-simplify: unnecessarily complex expressions and control flow.
+    "SIM",
+    # flake8-pie: unnecessary code and avoidable patterns.
+    "PIE",
+    # Perflint: common Python performance anti-patterns.
+    "PERF",
+    # flake8-pyi: correctness and style of published type stubs.
+    "PYI",
+    # Ruff: native correctness and suppression checks.
+    "RUF",
+]
+
+[tool.pytest]
+minversion = "9.0"
+testpaths = ["tests"]
+strict_config = true
+strict_markers = true
+strict_parametrization_ids = true
+strict_xfail = true
+filterwarnings = ["error"]
+markers = [
+    "h2spec: external HTTP/2 conformance tests requiring the h2spec executable",
+]
+
+[tool.coverage.run]
+plugins = ["Cython.Coverage"]
+source = ["ngh2"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.ty.src]
+include = ["src", "tests", "benchmarks"]

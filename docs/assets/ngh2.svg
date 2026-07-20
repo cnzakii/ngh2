@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="ngh2 — a Python-blue snake coiled into HTTP/2's 2">
+  <title>ngh2 — Python-blue snake forming HTTP/2's "2"</title>
+
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="#F6EEDF"/>
+
+  <defs>
+    <path id="ngh2-body" d="M120 96 C158 98 174 126 152 147 L96 184 L166 184"/>
+  </defs>
+
+  <!-- body: Python dark-blue outline, nature-blue fill, Python-yellow belly -->
+  <use href="#ngh2-body" fill="none" stroke="#306998" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <use href="#ngh2-body" fill="none" stroke="#4B8BBE" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M124 104 C156 106 166 128 148 146 L102 180 L150 180" fill="none" stroke="#FFD43B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>
+
+  <!-- front-facing head -->
+  <ellipse cx="106" cy="80" rx="26" ry="22" fill="#4B8BBE" stroke="#306998" stroke-width="5"/>
+  <ellipse cx="92" cy="88" rx="6" ry="4" fill="#8FBEDD" opacity="0.6"/>
+  <ellipse cx="120" cy="88" rx="6" ry="4" fill="#8FBEDD" opacity="0.6"/>
+  <circle cx="97" cy="76" r="7.5" fill="#FFFFFF"/>
+  <circle cx="115" cy="76" r="7.5" fill="#FFFFFF"/>
+  <circle cx="98" cy="78" r="4.2" fill="#241A16"/>
+  <circle cx="116" cy="78" r="4.2" fill="#241A16"/>
+  <circle cx="99.5" cy="75.5" r="1.7" fill="#FFFFFF"/>
+  <circle cx="117.5" cy="75.5" r="1.7" fill="#FFFFFF"/>
+  <circle cx="102" cy="88" r="1.4" fill="#306998"/>
+  <circle cx="110" cy="88" r="1.4" fill="#306998"/>
+  <path d="M98 92 Q106 98 114 92" stroke="#306998" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+
+  <!-- tongue -->
+  <path d="M106 96 v8 M106 104 l-3.5 3.5 M106 104 l3.5 3.5" stroke="#E24B3A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

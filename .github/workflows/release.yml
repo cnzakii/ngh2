@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify tag and package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="$(python3 -c 'import runpy; print(runpy.run_path("src/ngh2/_version.py")["__version__"])')"
+          test "$RELEASE_TAG" = "v$version"
+          grep -Fq "## [$version] - " CHANGELOG.md
+
+  wheels:
+    name: Wheels on ${{ matrix.platform }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: manylinux-x86_64
+            os: ubuntu-latest
+          - platform: manylinux-aarch64
+            os: ubuntu-24.04-arm
+          - platform: macos-x86_64
+            os: macos-15-intel
+          - platform: macos-aarch64
+            os: macos-14
+          - platform: windows-x86_64
+            os: windows-latest
+          - platform: windows-aarch64
+            os: windows-11-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: pypa/cibuildwheel@v4.1.0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.platform }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: Source distribution
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: false
+      - run: uv build --sdist
+      - name: Smoke-test source distribution
+        run: |
+          uv venv "$RUNNER_TEMP/ngh2-sdist-test"
+          uv pip install --python "$RUNNER_TEMP/ngh2-sdist-test/bin/python" dist/*.tar.gz
+          "$RUNNER_TEMP/ngh2-sdist-test/bin/python" -c "import ngh2"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "*"
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  github-release:
+    name: Publish GitHub release
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "*"
+          path: dist
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --generate-notes

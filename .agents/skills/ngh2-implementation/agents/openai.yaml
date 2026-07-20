@@ -1,0 +1,4 @@
+interface:
+  display_name: "ngh2 Implementation"
+  short_description: "Implement focused ngh2 changes safely"
+  default_prompt: "Use $ngh2-implementation to implement this ngh2 change and verify it."

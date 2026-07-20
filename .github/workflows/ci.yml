@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUFF_OUTPUT_FORMAT: github
+  TY_OUTPUT_FORMAT: github
+
+jobs:
+  lint:
+    name: Lint and static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v8.3.2
+      - run: uv sync --locked
+      - run: uv run --locked pre-commit run --all-files
+
+  python:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version:
+          ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15", "3.14t", "3.15t"]
+        include:
+          - os: ubuntu-24.04-arm
+            python-version: "3.12"
+          - os: macos-15-intel
+            python-version: "3.12"
+          - os: macos-14
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
+          - os: windows-11-arm
+            python-version: "3.12"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --locked --no-dev --group test
+      - run: uv run --locked --no-dev --group test pytest -m "not h2spec"
+
+  h2spec:
+    name: h2spec generic conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v8.3.2
+      - run: uv sync --locked --no-dev --group test
+      - name: Install h2spec 2.6.0
+        run: |
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/h2spec.tar.gz" \
+            https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
+          echo "157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318  $RUNNER_TEMP/h2spec.tar.gz" \
+            | sha256sum --check
+          mkdir "$RUNNER_TEMP/h2spec"
+          tar -xzf "$RUNNER_TEMP/h2spec.tar.gz" -C "$RUNNER_TEMP/h2spec"
+          echo "$RUNNER_TEMP/h2spec" >> "$GITHUB_PATH"
+      - run: uv run --locked --no-dev --group test pytest -m h2spec
+
+  package:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v8.3.2
+      - name: Build sdist and rebuild its wheel
+        run: |
+          uv build --sdist
+          uv build --wheel dist/*.tar.gz
+      - name: Test the installed wheel outside the source tree
+        run: |
+          uv venv "$RUNNER_TEMP/ngh2-wheel-test"
+          uv pip install --python "$RUNNER_TEMP/ngh2-wheel-test/bin/python" \
+            dist/*.whl pytest h2
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/ngh2-wheel-test/bin/python" -m pytest \
+            "$GITHUB_WORKSPACE/tests" -m "not h2spec"
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    # Codecov uses OIDC, so no long-lived upload token is stored.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CMAKE_ARGS: -DNGH2_COVERAGE=ON
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v8.3.2
+      - name: Build the traced extension
+        run: >-
+          uv --no-cache sync --locked --no-dev --group test --group coverage
+          --reinstall-package ngh2
+      - name: Expose generated C sources to the Cython coverage plugin
+        run: |
+          ln -s "$(find "$GITHUB_WORKSPACE/build" -name _core.c -print -quit)" src/ngh2/_core.c
+          ln -s "$(find "$GITHUB_WORKSPACE/build" -name events.c -print -quit)" src/ngh2/events.c
+      - run: uv run --no-sync coverage run -m pytest -m "not h2spec"
+      - run: uv run --no-sync coverage xml
+      - run: uv run --no-sync coverage report
+      - uses: codecov/codecov-action@v7
+        with:
+          disable_search: true
+          # Test and report generation already gate this job; an external
+          # upload outage should not block the project CI.
+          fail_ci_if_error: false
+          files: coverage.xml
+          use_oidc: true

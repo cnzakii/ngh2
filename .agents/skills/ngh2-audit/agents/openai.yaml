@@ -1,0 +1,4 @@
+interface:
+  display_name: "ngh2 Audit"
+  short_description: "Review ngh2 for evidence-backed defects"
+  default_prompt: "Use $ngh2-audit to review the current ngh2 changes for defects and unnecessary complexity."
