@@ -4,6 +4,8 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-20
+
 ### Added
 
 - Initial Python package for Sans-I/O HTTP/2 powered by libnghttp2.
