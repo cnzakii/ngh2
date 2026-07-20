@@ -70,8 +70,8 @@ wheel.exclude = ["**/*.pxd", "**/*.pyx"]
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-* cp314t-*"
 skip = ["*-win32", "*-musllinux_*"]
+before-test = 'python -m pip install --group "{project}/pyproject.toml:test"'
 test-command = 'pytest {project}/tests -m "not h2spec"'
-test-groups = ["test"]
 
 [tool.uv]
 cache-keys = [
