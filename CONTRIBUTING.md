@@ -18,7 +18,8 @@ uv sync --locked
 ```
 
 The default development interpreter is Python 3.12. Continuous integration
-also tests CPython 3.10 through 3.15, free-threaded CPython 3.14t through 3.15t,
+also tests supported CPython 3.10 through 3.14, free-threaded CPython 3.14t,
+prerelease CPython 3.15 and 3.15t,
 and native builds on Linux, macOS, and Windows.
 
 Enable the repository's pre-commit checks once after cloning:
