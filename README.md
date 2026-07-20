@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/cnzakii/ngh2/main/docs/assets/ngh2.svg" width="144" height="144" alt="ngh2 logo">
+  <img src="https://github.com/cnzakii/ngh2/raw/refs/heads/main/docs/assets/ngh2.svg" width="144" height="144" alt="ngh2 logo">
 </p>
 
 <h1 align="center">ngh2</h1>
@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/cnzakii/ngh2/actions/workflows/ci.yml"><img src="https://github.com/cnzakii/ngh2/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://codecov.io/gh/cnzakii/ngh2"><img src="https://codecov.io/gh/cnzakii/ngh2/graph/badge.svg" alt="codecov"></a>
+  <a href="https://codecov.io/gh/cnzakii/ngh2"><img src="https://codecov.io/gh/cnzakii/ngh2/graph/badge.svg?token=NT46X0NDGU" alt="codecov"></a>
   <a href="https://pypi.org/project/ngh2/"><img src="https://img.shields.io/pypi/v/ngh2.svg" alt="PyPI"></a>
   <a href="https://pypi.org/project/ngh2/"><img src="https://img.shields.io/pypi/pyversions/ngh2.svg" alt="Python versions"></a>
   <a href="https://github.com/cnzakii/ngh2/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/free--threaded-3.14t%20to%203.15t-3776AB?logo=python&amp;logoColor=white" alt="Free-threaded CPython 3.14t–3.15t"></a>
