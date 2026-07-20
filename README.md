@@ -23,8 +23,8 @@ any transport and drain typed events; queue HTTP/2 operations and pass the
 resulting bytes back to the transport.
 
 The Python API is implemented in Cython over
-[`libnghttp2`](https://nghttp2.org/documentation/). Wheels include the native
-library, so users do not need a system nghttp2 installation.
+[`libnghttp2`](https://github.com/nghttp2/nghttp2). Wheels bundle libnghttp2,
+so no system installation is required.
 
 > ngh2 is currently alpha software. Its public API may change before the first
 > stable release.

@@ -39,6 +39,7 @@ cython_transpile(
 python_add_library(_core MODULE "${_core_c}" WITH_SOABI)
 python_add_library(events MODULE "${events_c}" WITH_SOABI)
 target_link_libraries(_core PRIVATE nghttp2)
+target_compile_definitions(_core PRIVATE NGHTTP2_NO_SSIZE_T)
 
 if(NGH2_COVERAGE)
   target_compile_definitions(_core PRIVATE CYTHON_TRACE=1)
