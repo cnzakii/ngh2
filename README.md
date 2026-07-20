@@ -13,7 +13,7 @@
   <a href="https://codecov.io/gh/cnzakii/ngh2"><img src="https://codecov.io/gh/cnzakii/ngh2/graph/badge.svg?token=NT46X0NDGU" alt="codecov"></a>
   <a href="https://pypi.org/project/ngh2/"><img src="https://img.shields.io/pypi/v/ngh2.svg" alt="PyPI"></a>
   <a href="https://pypi.org/project/ngh2/"><img src="https://img.shields.io/pypi/pyversions/ngh2.svg" alt="Python versions"></a>
-  <a href="https://github.com/cnzakii/ngh2/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/free--threaded-3.14t%20to%203.15t-3776AB?logo=python&amp;logoColor=white" alt="Free-threaded CPython 3.14t–3.15t"></a>
+  <a href="https://github.com/cnzakii/ngh2/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/free--threaded-3.14t-3776AB?logo=python&amp;logoColor=white" alt="Free-threaded CPython 3.14t"></a>
   <a href="https://github.com/cnzakii/ngh2/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
@@ -101,7 +101,7 @@ Header names and values are bytes. Callers supply required pseudo-header
 fields in RFC 9113 order. A `Connection` must be driven by one thread or task
 at a time, with operations serialized in protocol order; independent
 connections can run concurrently. ngh2 supports GIL-enabled CPython 3.10
-through 3.15 and free-threaded CPython 3.14t through 3.15t.
+through 3.14 and free-threaded CPython 3.14t.
 
 ## Performance
 
