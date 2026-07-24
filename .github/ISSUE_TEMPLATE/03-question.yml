@@ -1,0 +1,12 @@
+name: Usage question
+description: Ask about using or integrating ngh2
+title: "[Question] "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Explain what you are building and where you are stuck. Include a small example when it helps.
+    validations:
+      required: true

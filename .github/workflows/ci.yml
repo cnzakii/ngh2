@@ -18,8 +18,40 @@ env:
   TY_OUTPUT_FORMAT: github
 
 jobs:
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.paths.outputs.code }}
+      docs: ${{ steps.paths.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify affected checks
+        id: paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          sh .github/scripts/classify-changes.sh --self-test
+          if [[ "$GITHUB_EVENT_NAME" = workflow_dispatch ]] ||
+            [[ -z "$BASE_SHA" ]] ||
+            [[ "$BASE_SHA" = 0000000000000000000000000000000000000000 ]]
+          then
+            sh .github/scripts/classify-changes.sh --all >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" = pull_request ]]; then
+            git diff --name-only "$BASE_SHA...$GITHUB_SHA" |
+              sh .github/scripts/classify-changes.sh >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only "$BASE_SHA..$GITHUB_SHA" |
+              sh .github/scripts/classify-changes.sh >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
     name: Lint and static analysis
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -32,6 +64,8 @@ jobs:
 
   docs:
     name: Documentation
+    needs: changes
+    if: github.event_name != 'push' && needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,8 +78,8 @@ jobs:
 
   publish-docs:
     name: Publish development documentation
-    if: github.event_name == 'push'
-    needs: docs
+    needs: changes
+    if: github.event_name == 'push' && needs.changes.outputs.docs == 'true'
     permissions:
       contents: write
       pages: write
@@ -54,6 +88,8 @@ jobs:
 
   python:
     name: Python ${{ matrix.python-version }}${{ matrix.preview && ' preview' || '' }} on ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -92,6 +128,8 @@ jobs:
 
   h2spec:
     name: h2spec generic conformance
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -114,6 +152,8 @@ jobs:
 
   package:
     name: Source distribution
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -136,6 +176,8 @@ jobs:
 
   coverage:
     name: Coverage
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     # Codecov uses OIDC, so no long-lived upload token is stored.
     permissions:
@@ -168,3 +210,28 @@ jobs:
           fail_ci_if_error: false
           files: coverage.xml
           use_oidc: true
+
+  required:
+    name: Required checks
+    if: always()
+    needs:
+      - changes
+      - lint
+      - docs
+      - publish-docs
+      - python
+      - h2spec
+      - package
+      - coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful affected checks
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            case "$result" in
+              success|skipped) ;;
+              *) exit 1 ;;
+            esac
+          done
