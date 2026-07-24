@@ -43,6 +43,15 @@ uv run --locked pytest -m "not h2spec"
 uv build
 ```
 
+Build the documentation with strict link validation:
+
+```console
+uv run --locked --no-dev --group docs zensical build --strict
+```
+
+Use `zensical serve` with the same `--no-dev --group docs` arguments for local
+preview.
+
 The generic h2spec suite runs when the external `h2spec` executable is
 installed:
 
@@ -53,6 +62,24 @@ uv run --locked pytest -m h2spec
 Add or update tests for observable behavior changes. Keep public exports, type
 stubs, documentation, and native behavior synchronized. Include reproducible
 measurements for performance claims.
+
+## Documentation and examples
+
+Keep the documented learning path in protocol order: first exchange, protocol
+model, multiplexing, complete messages, transport integration, flow control,
+event handling, recovery, then optional controls.
+
+Examples are standalone teaching programs. Explain important protocol phases
+and ownership decisions with comments, show the observable result in the
+matching guide, and add deterministic programs to `tests/test_examples.py`.
+Do not replace a runnable lesson with assertion-oriented test code or hide its
+setup in a shared test helper.
+
+Pull requests build the documentation with strict validation. Merges to `main`
+publish the `dev` documentation, and version tags publish the corresponding
+`X.Y` documentation and update `latest` when appropriate. Configure GitHub
+Pages to use GitHub Actions before the first deployment; do not edit
+`gh-pages` manually.
 
 ## Releases
 

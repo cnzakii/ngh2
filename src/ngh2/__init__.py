@@ -1,4 +1,4 @@
-"""Sans-I/O HTTP/2 protocol library for Python, backed by libnghttp2."""
+"""A fast Sans-I/O HTTP/2 library for Python, powered by libnghttp2."""
 
 from ._core import Connection, pack_settings_payload
 from ._version import __version__

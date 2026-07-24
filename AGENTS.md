@@ -21,6 +21,8 @@
 - `tests`: behavior, lifecycle, limits, hyper-h2 interoperability, and h2spec
   adapter coverage.
 - `benchmarks`: reproducible public-API comparison workloads and rendering.
+- `examples`: standalone teaching programs exercised by the test suite.
+- `docs/site`: authored source for the public documentation website.
 - `docs/knowledge`: source-based facts, not project decisions or audit reports.
 - `.agents/skills`: project workflows for implementation, audit, and knowledge
   work.
@@ -40,6 +42,12 @@ uv run --locked pytest tests/test_connection.py
 uv run --locked pre-commit run --all-files
 uv run --locked pytest -m "not h2spec"
 uv build
+```
+
+Build public documentation with strict validation:
+
+```console
+uv run --locked --no-dev --group docs zensical build --strict
 ```
 
 Run `uv run --locked pytest -m h2spec` when the external `h2spec` executable is
@@ -64,6 +72,18 @@ installed and the changed behavior affects protocol interoperability.
 - Back protocol and libnghttp2 claims with RFCs, official documentation, or
   pinned source observations. Treat mature implementations as observed
   practice, not authority.
+- Treat the README, runnable examples, and `docs/site` as coordinated
+  user-facing entry points. Reuse canonical example source instead of
+  maintaining copied code.
+- Keep tutorials progressive and connected, guides task-oriented, and API
+  reference complete and neutral. Explain user actions, reasons, and observable
+  results without exposing binding internals that do not change how ngh2 is
+  used.
+- Keep `docs/knowledge` out of the published site. Use it to verify facts, not
+  as user-facing prose or a record of project decisions.
+- Do not edit the generated `gh-pages` branch manually. CI publishes
+  development documentation from `main` and release documentation from version
+  tags.
 - Keep generated C files, build output, local environments, editor state,
   temporary reports, and personal instructions out of version control.
 

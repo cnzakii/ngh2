@@ -30,6 +30,28 @@ jobs:
       - run: uv sync --locked
       - run: uv run --locked pre-commit run --all-files
 
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: astral-sh/setup-uv@v8.3.2
+      - run: bash -n .github/scripts/publish-docs.sh
+      - run: uv run --locked --no-dev --group docs zensical build --strict
+
+  publish-docs:
+    name: Publish development documentation
+    if: github.event_name == 'push'
+    needs: docs
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/publish-docs.yml
+
   python:
     name: Python ${{ matrix.python-version }}${{ matrix.preview && ' preview' || '' }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

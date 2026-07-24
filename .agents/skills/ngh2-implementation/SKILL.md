@@ -19,11 +19,16 @@ the repository boundaries in `AGENTS.md`.
    in libnghttp2, transport/runtime ownership outside the package, and
    Python-facing vocabulary natural for Python.
 4. Use `ngh2-knowledge` when a decision depends on protocol requirements,
-   libnghttp2 behavior, established tooling behavior, packaging rules, native
-   extension practice, or licenses. Separate source facts from project choices.
+   libnghttp2 behavior, documentation practice or tooling, packaging rules,
+   native extension practice, or licenses. Separate source facts from project
+   choices.
 5. Implement the smallest coherent design. Update all affected layers required
    for correctness, including Python exports, type information, and tests when
    their contract changes.
+   Treat the README, runnable examples, and `docs/site` as coordinated public
+   entry points, and reuse canonical content instead of maintaining copies.
+   Keep tutorials focused on learner progress and guides focused on real tasks;
+   explain each example's purpose, important actions, and observable result.
 6. Add the smallest check that would fail for a changed behavior. Match evidence
    to the claim: focused tests for behavior, interoperability for real peers,
    fuzzing for hostile input/state exploration, and benchmarks for performance.
@@ -44,6 +49,9 @@ the repository boundaries in `AGENTS.md`.
   duplicate implementations unless compatibility is explicitly required.
 - Do not invent protocol behavior, resource limits, safety claims, or
   performance claims without evidence.
+- Do not turn user documentation into test prose. Assertions may verify an
+  example, but the published example should read as a program a user would
+  actually adapt.
 - Do not add tests that only restate constants, types, or implementation
   spelling without protecting observable behavior.
 

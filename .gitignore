@@ -15,6 +15,8 @@ __pycache__/
 # Python and CMake build outputs
 build/
 dist/
+/site/
+/site-versioned/
 *.egg-info/
 *.whl
 CMakeUserPresets.json

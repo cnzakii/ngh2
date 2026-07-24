@@ -1,6 +1,6 @@
 ---
 name: ngh2-knowledge
-description: Research, verify, and, when explicitly requested, maintain source-based knowledge in docs/knowledge. Use for factual questions about HTTP/2, libnghttp2, Sans-I/O architecture, Python/native boundaries, C extension tooling, packaging, dependencies, licenses, performance, or established practice, including stale or conflicting claims. Keep project decisions and code-specific audit conclusions out of the collection.
+description: Research, verify, and, when explicitly requested, maintain source-based knowledge in docs/knowledge. Use for factual questions about HTTP/2, libnghttp2, Sans-I/O architecture, Python/native boundaries, C extension tooling, packaging, dependencies, licenses, performance, documentation practice and tooling, or established practice, including stale or conflicting claims. Keep project decisions and code-specific audit conclusions out of the collection.
 ---
 
 # ngh2 Knowledge
@@ -21,6 +21,9 @@ source maps; it does not decide what ngh2 should implement.
 3. Read only documents matching the protocol term, tool, claim, or evidence
    class. Follow direct citations when exact current wording or provenance
    matters.
+   Keep documentation-method facts in the engineering owner document and
+   generator, reference, publishing, and versioning behavior in the tooling
+   owner document.
 4. Keep these evidence classes distinct:
    - normative source: an applicable RFC or BCP;
    - authoritative registry: current IANA data;

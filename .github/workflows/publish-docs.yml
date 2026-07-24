@@ -1,0 +1,43 @@
+name: Publish documentation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: documentation-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy documentation
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/configure-pages@v6
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: false
+      - run: uv sync --locked --no-dev --group docs
+      - run: uv run --locked --no-dev --group docs zensical build --strict
+      - name: Build versioned site
+        env:
+          DOCS_REF_NAME: ${{ github.ref_name }}
+          DOCS_REF_TYPE: ${{ github.ref_type }}
+        run: bash .github/scripts/publish-docs.sh
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site-versioned
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
