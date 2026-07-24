@@ -23,7 +23,11 @@ decisions, or project recommendations.
 
 - Protocol:
   [HTTP/2 user model](protocol/http2-user-model.md) and
-  [libnghttp2 architecture and capability boundary](protocol/libnghttp2.md)
+  [libnghttp2 architecture and capability boundary](protocol/libnghttp2.md),
+  plus the
+  [version-pinned session state and data-flow model](protocol/libnghttp2-session.md)
+  and
+  [version-pinned public API and callback catalog](protocol/libnghttp2-api.md)
 - Python native extensions:
   [binding and packaging tooling](python-native/binding-tooling.md) and
   [version-pinned reference bindings](python-native/reference-bindings.md)

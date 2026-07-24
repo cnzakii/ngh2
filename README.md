@@ -52,14 +52,14 @@ setup, request, response, and events.
 
 - [Learn ngh2](https://cnzakii.github.io/ngh2/latest/learn/first-exchange/)
   through one connected tutorial sequence.
-- [Integrate a transport](https://cnzakii.github.io/ngh2/latest/guides/transport/)
-  with TLS, asyncio, flow control, event handling, recovery, and shutdown.
+- [Integrate asyncio transports](https://cnzakii.github.io/ngh2/latest/guides/transport/)
+  for clients and servers, then add flow control, recovery, and shutdown.
 - [Use advanced HTTP/2](https://cnzakii.github.io/ngh2/latest/advanced/)
   features only when your application needs them.
 - [Look up the Python API](https://cnzakii.github.io/ngh2/latest/reference/) for
   exact methods, return values, event fields, and exceptions.
-- [Browse the runnable examples](examples/README.md) without the surrounding
-  tutorial prose.
+- [Browse the runnable examples](https://github.com/cnzakii/ngh2/tree/main/examples)
+  without the surrounding tutorial prose.
 
 ## Scope
 
@@ -90,11 +90,11 @@ accounting, event construction, and frame serialization.
 
 | Scenario | ngh2 (µs/exchange) | h2 4.4.0 (µs/exchange) | Relative throughput |
 | --- | ---: | ---: | ---: |
-| Small request/204 round trip | 2.60 | 64.38 | 24.8× |
-| Header block · 32 fields | 5.85 | 140.81 | 24.1× |
-| Fragmented request · 5 B | 2.93 | 67.73 | 23.1× |
-| Request body · 32 KiB | 7.59 | 126.77 | 16.7× |
-| Multiplexed batch · 100 streams | 1.78 | 50.91 | 28.5× |
+| Small request/204 round trip | 2.56 | 63.20 | 24.7× |
+| Header block · 32 fields | 5.76 | 138.43 | 24.0× |
+| Fragmented request · 5 B | 2.91 | 65.77 | 22.6× |
+| Request body · 32 KiB | 7.63 | 125.26 | 16.4× |
+| Multiplexed batch · 100 streams | 1.80 | 49.88 | 27.7× |
 
 These are protocol-layer measurements, not end-to-end client or server
 benchmarks. They exclude sockets, TLS, event-loop scheduling, and application

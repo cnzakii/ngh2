@@ -65,6 +65,7 @@ def main() -> None:
     transfer(server, client)
 
     response_body = bytearray()
+    response_result: str | None = None
     for event in client.events():
         if isinstance(event, ngh2.InformationalResponseReceived):
             print(
@@ -75,8 +76,18 @@ def main() -> None:
         elif isinstance(event, ngh2.DataReceived):
             response_body.extend(event.data)
         elif isinstance(event, ngh2.TrailersReceived):
-            result = dict(event.headers)[b"result"].decode()
-            print(f"client received {bytes(response_body)!r} with result {result}")
+            response_result = dict(event.headers)[b"result"].decode()
+        elif isinstance(event, ngh2.StreamClosed) and event.stream_id == upload_id:
+            if event.local_error is not None:
+                raise event.local_error
+            if event.error_code != ngh2.ErrorCode.NO_ERROR:
+                raise RuntimeError(f"upload closed with error {event.error_code}")
+            if response_result is None:
+                raise RuntimeError("response closed without result trailers")
+            print(
+                f"client received {bytes(response_body)!r} "
+                f"with result {response_result}"
+            )
 
     # end_stream() is the explicit form for ending an open body without adding
     # bytes or trailers. A peer can instead cancel the stream with RST_STREAM.

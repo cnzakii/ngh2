@@ -75,6 +75,12 @@ def main() -> None:
             elif isinstance(event, ngh2.DataReceived):
                 bodies[event.stream_id].extend(event.data)
             elif isinstance(event, ngh2.StreamClosed):
+                if event.local_error is not None:
+                    raise event.local_error
+                if event.error_code != ngh2.ErrorCode.NO_ERROR:
+                    raise RuntimeError(
+                        f"stream {event.stream_id} closed with error {event.error_code}"
+                    )
                 completed_path = paths_by_stream[event.stream_id]
                 completed_body = bytes(bodies.pop(event.stream_id))
                 print(

@@ -5,18 +5,20 @@ description: Distinguish immediate exceptions from peer events, choose the right
 # Handle errors and shutdown
 
 Recovery depends on what failed and when, not only on an exception class name.
-ngh2 reports immediate call failures as Python exceptions and reports
-peer-driven or delayed protocol outcomes as events.
+ngh2 reports rejected calls as Python exceptions. Once a stream operation has
+been accepted, its later outcome is part of that stream's event lifecycle.
 
 ## Choose recovery by scope
 
 | Situation | What you receive | What remains usable |
 | --- | --- | --- |
 | an argument or operation is rejected before it is queued | a synchronous exception such as `TypeError`, `ValueError`, or an `NGH2Error` subclass | the method documents the contract; a rejected local call does not automatically mean every stream is lost |
-| peer input fatally violates HTTP/2 or a configured resource limit | `ConnectionProtocolError` or `DenialOfServiceError` from `receive_data()` | the connection is failed; close its transport |
+| peer input cannot be processed safely or exceeds a configured resource limit | `ConnectionProtocolError` or `DenialOfServiceError` from `receive_data()` | the connection is failed; close its transport |
+| the state machine handles a connection-level protocol error by producing a final GOAWAY | `ConnectionClosed` after output is driven | write the final output, then close the transport |
 | one stream cannot accept an operation | `StreamProtocolError` or a stream-specific subclass | other streams and the connection can continue |
 | the peer resets one stream | `StreamReset`, followed by `StreamClosed` | other streams and the connection can continue |
-| a queued non-DATA frame fails later during preparation | `FrameNotSent` with the underlying error | inspect the affected stream/frame; the failure is asynchronous because the call already returned |
+| an accepted local stream operation cannot complete later | `StreamClosed.local_error` | fail that stream; unrelated streams normally remain usable |
+| a malformed peer message causes a stream error | `StreamClosed` with a nonzero `error_code` | fail that stream and continue driving the connection |
 | the peer starts connection shutdown | `GoAwayReceived` | do not create new streams; eligible in-flight streams may continue |
 
 After a fatal receive error, later protocol calls raise `ConnectionStateError`.
@@ -36,12 +38,12 @@ Use the method that raised it and the documented scope:
 | `DenialOfServiceError` | peer input exceeded a configured connection resource limit | close the transport; do not replay the bytes into a looser live object |
 | `StreamProtocolError` | the operation violates one stream's message state | fail or correct that stream operation; unrelated streams can continue |
 | `StreamUnavailableError` | the stream no longer exists or cannot accept the operation | stop work for that stream and release its application state |
-| `PushDisabledError` | a queued push promise could not be prepared | skip the optional push; the parent stream can continue |
+| `PushDisabledError` | peer settings invalidated an accepted push promise | skip the promised stream; the parent stream can continue |
 | `ConnectionClosingError` | GOAWAY, shutdown, or ID state prevents a new request | submit new work on a replacement connection |
 | `NoAvailableStreamIDError` | no local stream identifier remains | drain the connection and create a replacement |
 | `InternalError` | the protocol engine encountered an unexpected failure | close the transport and discard the connection |
 
-`TypeError`, `ValueError`, `BufferError`, `OverflowError`, and `MemoryError`
+`TypeError`, `ValueError`, `BufferError`, and `MemoryError`
 remain ordinary Python failures documented on the method that can raise them.
 
 ## Bound untrusted peer input
@@ -67,8 +69,8 @@ the same bytes with a looser live object.
 ## Handle events in the connection driver
 
 Stream handlers should receive response, data, reset, and close events for
-their stream ID. The connection driver should keep GOAWAY, SETTINGS, PING, and
-late frame failures visible even when no request task is currently waiting for
+their stream ID. The connection driver should keep GOAWAY, connection closure,
+SETTINGS, and PING visible even when no request task is currently waiting for
 them.
 
 `ErrorCode` represents values carried on the wire in RST_STREAM and GOAWAY. It
@@ -82,6 +84,12 @@ connection.reset_stream(stream_id, ngh2.ErrorCode.CANCEL)
 
 The peer receives `StreamReset`; both endpoints eventually receive
 `StreamClosed` and can release that stream's state.
+
+ngh2 also rejects invalid peer HTTP fields instead of silently passing or
+discarding them. A malformed request or response does not produce the normal
+message event. The state machine queues the appropriate RST_STREAM, and
+`StreamClosed.error_code` reports the stream-level protocol failure after
+output is driven.
 
 ## Stop a server gracefully
 
@@ -116,8 +124,10 @@ In a real server:
 5. close the caller-owned transport.
 
 `terminate_connection()` is the immediate final path: it queues a final GOAWAY
-and stops session processing. Use it for an unrecoverable connection or after
-your shutdown policy no longer permits further stream work.
+and stops session processing. Drive output, write the returned bytes, then
+handle the resulting `ConnectionClosed` event and close the transport. Use it
+for an unrecoverable connection or after your shutdown policy no longer
+permits further stream work.
 
 ## Retry only requests known to be unprocessed
 

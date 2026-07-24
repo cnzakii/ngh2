@@ -63,11 +63,24 @@ def main() -> None:
     # before the application closes its caller-owned transport.
     server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
     transfer(server, client)
-    if any(
-        isinstance(event, ngh2.StreamClosed) and event.stream_id == stream_id
-        for event in client.events()
-    ):
-        print(f"in-flight stream {stream_id} completed")
+    events = client.events()
+    closed = next(
+        event
+        for event in events
+        if isinstance(event, ngh2.StreamClosed) and event.stream_id == stream_id
+    )
+    if closed.local_error is not None:
+        raise closed.local_error
+    if closed.error_code != ngh2.ErrorCode.NO_ERROR:
+        raise RuntimeError(f"stream {stream_id} closed with error {closed.error_code}")
+    connection_closed = next(
+        event for event in events if isinstance(event, ngh2.ConnectionClosed)
+    )
+    if connection_closed.error_code != ngh2.ErrorCode.NO_ERROR:
+        raise RuntimeError(
+            f"connection closed with error {connection_closed.error_code}"
+        )
+    print(f"in-flight stream {stream_id} completed")
 
 
 if __name__ == "__main__":

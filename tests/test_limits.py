@@ -5,8 +5,10 @@ from ngh2 import (
     Connection,
     ConnectionStateError,
     DenialOfServiceError,
-    FrameNotSent,
+    ErrorCode,
     Role,
+    StreamClosed,
+    StreamProtocolError,
 )
 
 
@@ -101,10 +103,41 @@ class TestResourceLimits:
         server.send_data(stream_id, b"body", end_stream=True)
 
         assert server.pending_data(stream_id) == 4
-        assert server.data_to_send() == b""
-        assert any(isinstance(event, FrameNotSent) for event in server.events())
+        assert server.data_to_send()
+        closed = next(
+            event for event in server.events() if isinstance(event, StreamClosed)
+        )
+        assert closed.stream_id == stream_id
+        assert closed.error_code == ErrorCode.INTERNAL_ERROR
+        assert isinstance(closed.local_error, StreamProtocolError)
         assert server.pending_data(stream_id) == 0
         assert server.pending_data() == 0
+
+    def test_unsent_request_headers_close_the_reserved_stream(self):
+        client = Connection(
+            Role.CLIENT,
+            Configuration(max_send_header_block_length=64),
+        )
+        server = Connection(Role.SERVER)
+        begin(client, server)
+        stream_id = client.send_request(
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+                (b"x-large", b"x" * 200),
+            ],
+            end_stream=True,
+        )
+
+        assert client.data_to_send() == b""
+        closed = next(
+            event for event in client.events() if isinstance(event, StreamClosed)
+        )
+        assert closed.stream_id == stream_id
+        assert closed.error_code == ErrorCode.REFUSED_STREAM
+        assert isinstance(closed.local_error, StreamProtocolError)
 
     def test_manual_window_update_rejects_double_acknowledgement(self):
         client = Connection(Role.CLIENT)

@@ -20,6 +20,7 @@ nav = [
     ] },
     { "Integrate ngh2" = [
         { "Drive an asyncio transport" = "guides/transport.md" },
+        { "Serve with asyncio" = "guides/server.md" },
         { "Flow control and backpressure" = "guides/flow-control.md" },
         { "Events and actions" = "guides/events.md" },
         { "Errors and shutdown" = "guides/errors-and-shutdown.md" },
@@ -104,6 +105,7 @@ base_path = [
     "examples/python/multiplexed_round_trip.py",
     "examples/python/message_lifecycle.py",
     "examples/python/asyncio_client.py",
+    "examples/python/asyncio_server.py",
     "examples/python/manual_flow_control.py",
     "examples/python/graceful_shutdown.py",
     "examples/python/connection_controls.py",

@@ -87,10 +87,11 @@ serializing available protocol output:
 ```python
 while connection.want_write:
     chunk = connection.data_to_send(16_384)
+    if chunk:
+        transport.write(chunk)
     handle_events(connection.events())
     if not chunk:
         break
-    transport.write(chunk)
 ```
 
 A zero-length result can also mean DATA is blocked by flow control. Keep reading

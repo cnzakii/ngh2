@@ -1,5 +1,5 @@
 ---
-description: Send an HTTP/2 push promise, receive a pushed response, reject unwanted push, and handle delayed push failure.
+description: Send an HTTP/2 push promise, receive a pushed response, reject unwanted push, and handle promised-stream failure.
 ---
 
 # Use server push deliberately
@@ -47,7 +47,7 @@ Create per-stream response state before DATA arrives. If the application does
 not want this accepted push, call
 `reset_stream(event.promised_stream_id, ErrorCode.CANCEL)`.
 
-## Handle disabled push after serialization
+## Handle push disabled while work is queued
 
 A client disables push with:
 
@@ -56,9 +56,9 @@ client.initiate_connection({ngh2.Setting.ENABLE_PUSH: 0})
 ```
 
 The server cannot assume a promise will be sent merely because
-`send_push_promise()` returned a stream ID. Frame preparation happens later;
-`data_to_send()` can produce `FrameNotSent` whose `error` is
-`PushDisabledError`.
+`send_push_promise()` returned a stream ID. If peer settings disable push
+before queued output is prepared, that promised stream produces
+`StreamClosed(local_error=PushDisabledError(...))`.
 
 Treat that outcome as a failed optional operation. Do not fail unrelated
 streams, and do not wait for the promised response to become writable.

@@ -66,8 +66,9 @@ server.send_origins(
 
 `OriginReceived.origins` supplies the advertised byte origins. The frame does
 not replace certificate checks and must not be treated as permission to send
-unrelated credentials or bypass proxy policy. ORIGIN is ignored on `h2c`
-connections.
+unrelated credentials or bypass proxy policy. ngh2 does not know whether its
+transport uses TLS, so the connection owner must ignore `OriginReceived` on
+`h2c` and any other unauthenticated transport.
 
 These extension frames are hop-by-hop. An intermediary consumes them according
 to its own policy rather than forwarding them unchanged.

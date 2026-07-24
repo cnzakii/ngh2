@@ -1,6 +1,7 @@
 # cython: embedsignature=True, freethreading_compatible=True, language_level=3
 
 from libc.stdint cimport uint32_t
+from types import MappingProxyType
 
 
 cdef class Event:
@@ -170,17 +171,23 @@ cdef class StreamClosed(Event):
 
     Attributes:
         stream_id: Closed stream.
-        error_code: Wire reason, including zero for ordinary completion.
+        error_code: State-machine closure reason, including zero for ordinary
+            completion.
+        local_error: Delayed local operation failure that caused closure, or
+            ``None`` when closure followed normal protocol progress or peer
+            action.
     """
 
-    __match_args__ = ("stream_id", "error_code")
+    __match_args__ = ("stream_id", "error_code", "local_error")
 
     cdef readonly int stream_id
     cdef readonly uint32_t error_code
+    cdef readonly object local_error
 
-    def __init__(self, int stream_id, uint32_t error_code):
+    def __init__(self, int stream_id, uint32_t error_code, object local_error):
         self.stream_id = stream_id
         self.error_code = error_code
+        self.local_error = local_error
 
 
 cdef class SettingsReceived(Event):
@@ -192,10 +199,10 @@ cdef class SettingsReceived(Event):
 
     __match_args__ = ("settings",)
 
-    cdef readonly dict settings
+    cdef readonly object settings
 
     def __init__(self, dict settings):
-        self.settings = settings
+        self.settings = MappingProxyType(settings.copy())
 
 
 cdef class SettingsAcknowledged(Event):
@@ -271,6 +278,27 @@ cdef class GoAwayReceived(Event):
         self.debug_data = debug_data
 
 
+cdef class ConnectionClosed(Event):
+    """The HTTP/2 state machine has finished connection processing.
+
+    When this event is produced by ``Connection.data_to_send()``, the caller
+    must write the bytes returned by that call before closing its transport.
+
+    Attributes:
+        error_code: Final HTTP/2 shutdown reason.
+        debug_data: Opaque diagnostics associated with that reason.
+    """
+
+    __match_args__ = ("error_code", "debug_data")
+
+    cdef readonly uint32_t error_code
+    cdef readonly bytes debug_data
+
+    def __init__(self, uint32_t error_code, bytes debug_data):
+        self.error_code = error_code
+        self.debug_data = debug_data
+
+
 cdef class AltSvcReceived(Event):
     """An RFC 7838 alternative service advertisement was received.
 
@@ -323,24 +351,3 @@ cdef class PriorityUpdateReceived(Event):
     def __init__(self, int prioritized_stream_id, bytes field_value):
         self.prioritized_stream_id = prioritized_stream_id
         self.field_value = field_value
-
-
-cdef class FrameNotSent(Event):
-    """A queued non-DATA frame failed during preparation.
-
-    Attributes:
-        stream_id: Associated stream, or zero for connection frames.
-        frame_type: Type of frame that could not be sent.
-        error: Exception describing why the frame could not be prepared.
-    """
-
-    __match_args__ = ("stream_id", "frame_type", "error")
-
-    cdef readonly int stream_id
-    cdef readonly object frame_type
-    cdef readonly object error
-
-    def __init__(self, int stream_id, object frame_type, object error):
-        self.stream_id = stream_id
-        self.frame_type = frame_type
-        self.error = error

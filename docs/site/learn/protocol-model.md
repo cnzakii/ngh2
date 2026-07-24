@@ -52,13 +52,23 @@ transport bytes → receive_data() → events() → application
 transport bytes ← data_to_send() ← send_*() ← application
 ```
 
-The arrows are deliberately separate. `send_request()` and other outbound
-methods queue intent; they do not write a socket. `data_to_send()` asks the
-state machine what can be serialized now, after applying stream state,
-scheduling, frame-size limits, and flow-control windows.
+The arrows are deliberately separate. A successful `send_request()` or other
+`send_*()` call means the local HTTP/2 state accepted that operation. It does
+not mean the next `data_to_send()` call must contain all of its bytes, and it
+does not mean anything was written to a socket. Scheduling, other streams, and
+DATA flow-control windows determine when output becomes available.
+
+`data_to_send()` advances that shared connection state and returns the bytes
+currently ready for the caller-owned transport. If an accepted stream
+operation later becomes impossible—for example, a queued push promise is
+invalidated by new peer settings—the stream ends with a `StreamClosed` event
+whose `local_error` explains the local failure. The connection and unrelated
+streams can normally continue.
 
 Likewise, `receive_data()` does not call your request handler. It updates the
-connection and queues events for you to drain.
+connection and queues events for you to drain. Peer protocol violations may
+also queue a reset or shutdown response, so drive `data_to_send()` after
+handling input even when the application has nothing new to send.
 
 ## Ownership stays explicit
 

@@ -69,6 +69,7 @@ Every transport adapter repeats the same cycle:
 1. Read bytes from the transport and pass them to `receive_data()`.
 2. Drain `events()` and let the application react.
 3. Drain `data_to_send()` and write those bytes to the transport.
+4. Drain events produced while output was serialized.
 
 Both `receive_data()` and `data_to_send()` can produce events or queue more
 protocol work. Draining events and outbound bytes after each protocol action

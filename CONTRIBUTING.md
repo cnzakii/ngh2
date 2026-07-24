@@ -4,7 +4,8 @@ Bug fixes, tests, documentation, API feedback, performance improvements, and
 changes that simplify the binding are welcome. Please open an issue before
 adding public API or changing protocol behavior. Report vulnerabilities through
 [SECURITY.md](SECURITY.md), not a public issue.
-Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+Participation is governed by the
+[Code of Conduct](https://github.com/cnzakii/ngh2/blob/main/CODE_OF_CONDUCT.md).
 
 ## Development Setup
 

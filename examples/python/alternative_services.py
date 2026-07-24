@@ -33,7 +33,7 @@ def main() -> None:
         b'h3=":443"; ma=3600',
         origin=b"https://example.test",
     )
-    # ORIGIN advertises origins that may share this authenticated connection.
+    # ORIGIN is input to the transport owner's authenticated coalescing policy.
     server.send_origins(
         [
             b"https://example.test",

@@ -73,6 +73,26 @@ Do not read an entire large file into one bytes object merely because
 `send_data()` accepts bytes-like input. Submit bounded chunks. ngh2 provides a
 queue, not an application memory limit.
 
+## Change advertised receive capacity deliberately
+
+Use `set_local_window_size()` when the endpoint needs a larger or smaller
+absolute receive-window target:
+
+```python
+# Connection-wide capacity.
+connection.set_local_window_size(1_048_576)
+
+# Additional per-stream capacity. Both limits still apply to DATA.
+connection.set_local_window_size(262_144, stream_id=stream_id)
+```
+
+Increasing a target queues WINDOW_UPDATE as needed. Reducing one can take
+effect gradually while already received DATA drains.
+
+This method does not say that application data was consumed. In manual mode,
+continue to call `acknowledge_received_data()` only after the downstream
+consumer accepts each `DataReceived` payload.
+
 ## Keep reading while a sender is blocked
 
 When a remote window reaches zero, `data_to_send()` can leave body bytes

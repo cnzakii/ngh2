@@ -1,4 +1,5 @@
-from .enums import FrameType
+from collections.abc import Mapping
+
 from .exceptions import NGH2Error
 from .types import Header
 
@@ -101,20 +102,27 @@ class StreamReset(Event):
     def error_code(self) -> int: ...
 
 class StreamClosed(Event):
-    __match_args__ = ("stream_id", "error_code")
+    __match_args__ = ("stream_id", "error_code", "local_error")
 
-    def __init__(self, stream_id: int, error_code: int) -> None: ...
+    def __init__(
+        self,
+        stream_id: int,
+        error_code: int,
+        local_error: NGH2Error | None,
+    ) -> None: ...
     @property
     def stream_id(self) -> int: ...
     @property
     def error_code(self) -> int: ...
+    @property
+    def local_error(self) -> NGH2Error | None: ...
 
 class SettingsReceived(Event):
     __match_args__ = ("settings",)
 
     def __init__(self, settings: dict[int, int]) -> None: ...
     @property
-    def settings(self) -> dict[int, int]: ...
+    def settings(self) -> Mapping[int, int]: ...
 
 class SettingsAcknowledged(Event):
     __match_args__ = ()
@@ -158,6 +166,19 @@ class GoAwayReceived(Event):
     @property
     def debug_data(self) -> bytes: ...
 
+class ConnectionClosed(Event):
+    __match_args__ = ("error_code", "debug_data")
+
+    def __init__(
+        self,
+        error_code: int,
+        debug_data: bytes,
+    ) -> None: ...
+    @property
+    def error_code(self) -> int: ...
+    @property
+    def debug_data(self) -> bytes: ...
+
 class AltSvcReceived(Event):
     __match_args__ = ("stream_id", "origin", "field_value")
 
@@ -184,19 +205,3 @@ class PriorityUpdateReceived(Event):
     def prioritized_stream_id(self) -> int: ...
     @property
     def field_value(self) -> bytes: ...
-
-class FrameNotSent(Event):
-    __match_args__ = ("stream_id", "frame_type", "error")
-
-    def __init__(
-        self,
-        stream_id: int,
-        frame_type: FrameType,
-        error: NGH2Error,
-    ) -> None: ...
-    @property
-    def stream_id(self) -> int: ...
-    @property
-    def frame_type(self) -> FrameType: ...
-    @property
-    def error(self) -> NGH2Error: ...

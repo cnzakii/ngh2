@@ -7,6 +7,14 @@ from urllib.parse import urlsplit
 import ngh2
 
 
+def encode_authority(hostname: str, port: int | None) -> bytes:
+    """Encode a URI authority, preserving brackets around IPv6 literals."""
+    authority = f"[{hostname}]" if ":" in hostname else hostname
+    if port is not None:
+        authority = f"{authority}:{port}"
+    return authority.encode("ascii")
+
+
 def process_response_events(
     connection: ngh2.Connection,
     stream_id: int,
@@ -25,21 +33,29 @@ def process_response_events(
             raise RuntimeError(
                 f"stream {stream_id} was reset with error {event.error_code}"
             )
-        elif isinstance(event, ngh2.FrameNotSent):
-            # data_to_send() reports delayed frame failures through events.
-            raise event.error
         elif (
             isinstance(event, ngh2.GoAwayReceived) and stream_id > event.last_stream_id
         ):
             raise RuntimeError(f"the peer did not process stream {stream_id}")
         elif isinstance(event, ngh2.StreamClosed) and event.stream_id == stream_id:
+            if event.local_error is not None:
+                raise event.local_error
+            if event.error_code != ngh2.ErrorCode.NO_ERROR:
+                raise RuntimeError(
+                    f"stream {stream_id} closed with error {event.error_code}"
+                )
             complete = True
+        elif isinstance(event, ngh2.ConnectionClosed) and not complete:
+            raise ConnectionError(
+                f"the HTTP/2 connection closed with error {event.error_code}"
+            )
     return status, complete
 
 
 async def get(url: str) -> tuple[int, bytes]:
     target = urlsplit(url)
-    if target.scheme != "https" or not target.hostname:
+    hostname = target.hostname
+    if target.scheme != "https" or not hostname:
         raise ValueError("URL must be an absolute https URL")
 
     # TLS negotiates HTTP/2 before any application bytes reach ngh2. The
@@ -48,10 +64,10 @@ async def get(url: str) -> tuple[int, bytes]:
     context.set_alpn_protocols(["h2"])
     port = target.port or 443
     reader, writer = await asyncio.open_connection(
-        target.hostname,
+        hostname,
         port,
         ssl=context,
-        server_hostname=target.hostname,
+        server_hostname=hostname,
     )
 
     ssl_object = writer.get_extra_info("ssl_object")
@@ -64,18 +80,16 @@ async def get(url: str) -> tuple[int, bytes]:
     try:
         # One coroutine owns the Connection and serializes every protocol action.
         connection = ngh2.Connection(ngh2.Role.CLIENT)
-        connection.initiate_connection()
+        # This client does not implement server-push policy or storage.
+        connection.initiate_connection({ngh2.Setting.ENABLE_PUSH: 0})
         path = target.path or "/"
         if target.query:
             path = f"{path}?{target.query}"
-        authority = target.hostname
-        if target.port is not None:
-            authority = f"{authority}:{target.port}"
         stream_id = connection.send_request(
             [
                 (b":method", b"GET"),
                 (b":scheme", b"https"),
-                (b":authority", authority.encode("ascii")),
+                (b":authority", encode_authority(hostname, target.port)),
                 (b":path", path.encode("ascii")),
                 (b"user-agent", b"ngh2-example"),
             ],
@@ -85,6 +99,8 @@ async def get(url: str) -> tuple[int, bytes]:
         # Queueing a request does not touch the socket. data_to_send() returns
         # the preface, SETTINGS, and currently schedulable request bytes.
         outgoing = connection.data_to_send()
+        writer.write(outgoing)
+        await writer.drain()
         status: int | None = None
         body = bytearray()
         status, complete = process_response_events(
@@ -93,8 +109,6 @@ async def get(url: str) -> tuple[int, bytes]:
             status,
             body,
         )
-        writer.write(outgoing)
-        await writer.drain()
 
         while not complete:
             data = await reader.read(65_536)
@@ -110,7 +124,10 @@ async def get(url: str) -> tuple[int, bytes]:
             )
 
             outgoing = connection.data_to_send()
-            # Serialization can itself produce FrameNotSent or StreamClosed.
+            # Write first: ConnectionClosed can accompany the final output.
+            if outgoing:
+                writer.write(outgoing)
+                await writer.drain()
             status, sent_complete = process_response_events(
                 connection,
                 stream_id,
@@ -118,9 +135,6 @@ async def get(url: str) -> tuple[int, bytes]:
                 body,
             )
             complete = complete or sent_complete
-            if outgoing:
-                writer.write(outgoing)
-                await writer.drain()
 
         if status is None:
             raise RuntimeError("the response ended without final headers")

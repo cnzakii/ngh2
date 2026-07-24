@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+import ngh2
+
 EXAMPLES = [
     (
         "first_round_trip.py",
@@ -114,3 +116,126 @@ def test_asyncio_example_cli_help(
 
     assert exit_info.value.code == 0
     assert "Fetch one HTTPS URL with ngh2" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("hostname", "port", "expected"),
+    [
+        ("example.com", None, b"example.com"),
+        ("2001:db8::1", None, b"[2001:db8::1]"),
+        ("2001:db8::1", 8443, b"[2001:db8::1]:8443"),
+    ],
+)
+def test_asyncio_client_encodes_authority(
+    hostname: str,
+    port: int | None,
+    expected: bytes,
+) -> None:
+    example = Path(__file__).parents[1] / "examples" / "python" / "asyncio_client.py"
+    encode_authority = runpy.run_path(str(example))["encode_authority"]
+
+    assert encode_authority(hostname, port) == expected
+
+
+def test_asyncio_server_cli_help(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    example = Path(__file__).parents[1] / "examples" / "python" / "asyncio_server.py"
+    monkeypatch.setattr(sys, "argv", [str(example), "--help"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_path(str(example), run_name="__main__")
+
+    assert exit_info.value.code == 0
+    assert "Serve HTTP/2 over TLS with ngh2" in capsys.readouterr().out
+
+
+def test_asyncio_server_responds_to_complete_requests() -> None:
+    example = Path(__file__).parents[1] / "examples" / "python" / "asyncio_server.py"
+    process_request_events = runpy.run_path(str(example))["process_request_events"]
+    client = ngh2.Connection(ngh2.Role.CLIENT)
+    server = ngh2.Connection(ngh2.Role.SERVER)
+    client.initiate_connection()
+    server.initiate_connection()
+    for source, destination in (
+        (client, server),
+        (server, client),
+        (client, server),
+        (server, client),
+    ):
+        destination.receive_data(source.data_to_send())
+    client.events()
+    process_request_events(server, {})
+
+    stream_id = client.send_request(
+        [
+            (b":method", b"GET"),
+            (b":scheme", b"https"),
+            (b":authority", b"localhost:8443"),
+            (b":path", b"/"),
+        ],
+        end_stream=True,
+    )
+    server.receive_data(client.data_to_send())
+    process_request_events(server, {})
+    client.receive_data(server.data_to_send())
+
+    events = client.events()
+    response = next(
+        event for event in events if isinstance(event, ngh2.ResponseReceived)
+    )
+    data = next(event for event in events if isinstance(event, ngh2.DataReceived))
+    assert response.stream_id == stream_id
+    assert dict(response.headers)[b":status"] == b"200"
+    assert data.data == b"Hello over HTTP/2\n"
+
+    stream_id = client.send_request(
+        [
+            (b":method", b"POST"),
+            (b":scheme", b"https"),
+            (b":authority", b"localhost:8443"),
+            (b":path", b"/"),
+        ]
+    )
+    client.send_data(stream_id, b"ignored", end_stream=True)
+    server.receive_data(client.data_to_send())
+    process_request_events(server, {})
+    client.receive_data(server.data_to_send())
+
+    response = next(
+        event for event in client.events() if isinstance(event, ngh2.ResponseReceived)
+    )
+    assert response.stream_id == stream_id
+    assert dict(response.headers)[b":status"] == b"405"
+    assert dict(response.headers)[b"allow"] == b"GET, HEAD"
+
+
+def test_asyncio_server_ignores_a_request_reset_in_the_same_input_batch() -> None:
+    example = Path(__file__).parents[1] / "examples" / "python" / "asyncio_server.py"
+    process_request_events = runpy.run_path(str(example))["process_request_events"]
+    client = ngh2.Connection(ngh2.Role.CLIENT)
+    server = ngh2.Connection(ngh2.Role.SERVER)
+    client.initiate_connection()
+    server.initiate_connection()
+    server.receive_data(client.data_to_send())
+    client.receive_data(server.data_to_send())
+    server.receive_data(client.data_to_send())
+    client.events()
+    server.events()
+    requests: dict[int, tuple[ngh2.Header, ...]] = {}
+
+    stream_id = client.send_request(
+        [
+            (b":method", b"GET"),
+            (b":scheme", b"https"),
+            (b":authority", b"localhost:8443"),
+            (b":path", b"/"),
+        ],
+        end_stream=True,
+    )
+    client.reset_stream(stream_id)
+    server.receive_data(client.data_to_send())
+
+    assert not process_request_events(server, requests)
+    assert requests == {}

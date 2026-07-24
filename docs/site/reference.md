@@ -16,7 +16,7 @@ that transport.
 | initialize or drive a connection | `Connection.initiate_connection()`, `receive_data()`, `events()`, `data_to_send()` |
 | send an HTTP message | `send_request()`, `send_response()`, `send_data()`, `send_trailers()` |
 | react to peer activity | the event classes under **Events** |
-| control buffering | `pending_data()` and `acknowledge_received_data()` |
+| control buffering | `pending_data()`, `acknowledge_received_data()`, and `set_local_window_size()` |
 | shut down | `send_shutdown_notice()`, `send_goaway()`, `terminate_connection()` |
 | use optional protocol controls | the [Advanced HTTP/2 guides](advanced.md) |
 | tune limits | `Configuration` |
@@ -47,8 +47,6 @@ order; pseudo-header fields precede ordinary fields.
 
 ::: ngh2.ErrorCode
 
-::: ngh2.FrameType
-
 ::: ngh2.Setting
 
 ## h2c settings helper
@@ -75,10 +73,10 @@ order; pseudo-header fields precede ordinary fields.
         - PingAcknowledged
         - WindowUpdated
         - GoAwayReceived
+        - ConnectionClosed
         - AltSvcReceived
         - OriginReceived
         - PriorityUpdateReceived
-        - FrameNotSent
 
 ## Errors
 

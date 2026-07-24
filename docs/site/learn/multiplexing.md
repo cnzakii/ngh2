@@ -53,13 +53,20 @@ for event in connection.events():
     elif isinstance(event, ngh2.DataReceived):
         bodies[event.stream_id].extend(event.data)
     elif isinstance(event, ngh2.StreamClosed):
+        if event.local_error is not None:
+            raise event.local_error
+        if event.error_code != ngh2.ErrorCode.NO_ERROR:
+            raise RuntimeError(
+                f"stream {event.stream_id} closed with error {event.error_code}"
+            )
         completed_body = bytes(bodies.pop(event.stream_id, b""))
         deliver_response(event.stream_id, completed_body)
 ```
 
 `deliver_response()` represents your client, server, or proxy code. The
-important part is that response state belongs to a stream, not to “the current
-request.”
+important parts are that response state belongs to a stream, not to “the
+current request,” and that only a cleanly closed stream publishes a successful
+response.
 
 ## Separate stream and connection work
 

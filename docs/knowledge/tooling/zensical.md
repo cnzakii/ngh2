@@ -126,11 +126,22 @@ cache behavior is undergoing revision.
 GitHub's own Pages documentation confirms that custom workflows use
 `configure-pages`, `upload-pages-artifact`, and `deploy-pages`, and that the
 deployment job needs `pages: write` and `id-token: write` permissions.
+The `configure-pages` action does not enable an unconfigured Pages site with
+the workflow's default `GITHUB_TOKEN`; its optional enablement input requires a
+different token. A personal access token needs the `repo` scope or Pages write
+permission; a GitHub App token needs repository administration and Pages write
+permissions.
+
+GitHub environments can restrict deployments with separate branch and tag name
+patterns. A workflow ref must match the relevant policy before its deployment
+job can use that environment.
 
 Sources:
 
 - [Zensical publishing](https://zensical.org/docs/publish-your-site/)
 - [GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
+- [configure-pages action inputs](https://github.com/actions/configure-pages/blob/main/action.yml)
+- [GitHub deployment branch policies](https://docs.github.com/en/rest/deployments/branch-policies)
 
 ## Documentation Versioning
 

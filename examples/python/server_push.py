@@ -72,17 +72,23 @@ def main() -> None:
         elif isinstance(event, ngh2.DataReceived) and event.stream_id == pushed_id:
             pushed_body.extend(event.data)
         elif isinstance(event, ngh2.StreamClosed) and event.stream_id == pushed_id:
+            if event.local_error is not None:
+                raise event.local_error
+            if event.error_code != ngh2.ErrorCode.NO_ERROR:
+                raise RuntimeError(
+                    f"push {pushed_id} closed with error {event.error_code}"
+                )
             print(f"pushed response body: {bytes(pushed_body)!r}")
 
-    # Clients can disable future push. A promise is queued first and can fail
-    # later when data_to_send() prepares the frame, so inspect FrameNotSent.
+    # Clients can disable future push. If a queued promise later becomes
+    # invalid, its reserved stream closes with the local reason attached.
     client.update_settings({ngh2.Setting.ENABLE_PUSH: 0})
     transfer(client, server)
     transfer(server, client)
     client.events()
     server.events()
     second_parent = request(client, server, b"/without-push")
-    server.send_push_promise(
+    ignored_id = server.send_push_promise(
         second_parent,
         [
             (b":method", b"GET"),
@@ -92,10 +98,12 @@ def main() -> None:
         ],
     )
     server.data_to_send()
-    failure = next(
-        event for event in server.events() if isinstance(event, ngh2.FrameNotSent)
+    closed = next(
+        event
+        for event in server.events()
+        if isinstance(event, ngh2.StreamClosed) and event.stream_id == ignored_id
     )
-    print(f"disabled push reported as {type(failure.error).__name__}")
+    print(f"disabled push reported as {type(closed.local_error).__name__}")
 
 
 if __name__ == "__main__":

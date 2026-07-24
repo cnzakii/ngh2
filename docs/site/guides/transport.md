@@ -52,8 +52,9 @@ properties of the client and is not required by ngh2.
 The example keeps all operations in one coroutine:
 
 1. queue the connection preface and request;
-2. call `data_to_send()` and handle any events it produces;
-3. write the returned bytes and await transport backpressure;
+2. call `data_to_send()`;
+3. write the returned bytes and await transport backpressure, then handle any
+   events produced while serializing them;
 4. read transport bytes and pass them to `receive_data()`;
 5. route the resulting events by stream ID; and
 6. serialize acknowledgements or control frames, then handle events again.
@@ -65,15 +66,16 @@ connection.receive_data(incoming)
 handle_events(connection.events())
 
 outgoing = connection.data_to_send()
-handle_events(connection.events())
 if outgoing:
     writer.write(outgoing)
     await writer.drain()
+handle_events(connection.events())
 ```
 
-The event drain after `data_to_send()` catches delayed send failures such as
-`FrameNotSent`. Without it, a driver can wait for a response to a frame that
-was never serialized.
+The event drain after the write catches stream completion, delayed local stream
+failure, and terminal connection state. Keep that order because
+`ConnectionClosed` can accompany final GOAWAY bytes returned by
+`data_to_send()`.
 
 For a multiplexed client, keep this read-event-write cycle in one connection
 driver task. Other tasks can submit work through a queue and receive results
@@ -84,7 +86,9 @@ concurrently.
 
 `ResponseReceived` carries the final response fields. One or more
 `DataReceived` events carry the body. `StreamClosed` is the terminal lifecycle
-event, including for responses that end in their headers.
+event, including for responses that end in their headers. Treat a non-`None`
+`local_error` or a nonzero `error_code` as failure rather than successful
+completion.
 
 Transport EOF is different: it ends the entire connection. If EOF arrives
 before a target stream closes, the response did not complete cleanly.
@@ -93,4 +97,4 @@ The application also owns timeouts. A socket read timeout, a request deadline,
 and a PING-based liveness policy answer different questions and should not be
 hidden inside the protocol object.
 
-[Manage flow control and backpressure →](flow-control.md)
+[Serve HTTP/2 with asyncio →](server.md)
