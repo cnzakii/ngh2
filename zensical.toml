@@ -52,6 +52,7 @@ variant = "modern"
 language = "en"
 logo = "assets/ngh2.svg"
 favicon = "assets/ngh2.svg"
+custom_dir = "docs/overrides"
 features = [
     "content.code.copy",
     "navigation.footer",
