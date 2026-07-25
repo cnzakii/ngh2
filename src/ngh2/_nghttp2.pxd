@@ -163,29 +163,44 @@ cdef extern from "nghttp2/nghttp2.h":
         nghttp2_session *, const nghttp2_frame *, const uint8_t *, size_t,
         const uint8_t *, size_t, uint8_t, void *
     ) noexcept
+    ctypedef int (*nghttp2_on_invalid_header_callback)(
+        nghttp2_session *, const nghttp2_frame *, const uint8_t *, size_t,
+        const uint8_t *, size_t, uint8_t, void *
+    ) noexcept
     ctypedef int (*nghttp2_on_frame_not_send_callback)(
         nghttp2_session *, const nghttp2_frame *, int, void *
     ) noexcept
+    ctypedef int (*nghttp2_on_frame_send_callback)(
+        nghttp2_session *, const nghttp2_frame *, void *
+    ) noexcept
+    ctypedef void (*nghttp2_rand_callback)(uint8_t *, size_t) noexcept
 
     enum:
         NGHTTP2_ERR_WOULDBLOCK
         NGHTTP2_ERR_NOMEM
         NGHTTP2_ERR_CALLBACK_FAILURE
         NGHTTP2_ERR_DEFERRED
+        NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE
         NGHTTP2_ERR_INVALID_ARGUMENT
+        NGHTTP2_ERR_PROTO
         NGHTTP2_ERR_STREAM_ID_NOT_AVAILABLE
         NGHTTP2_ERR_STREAM_CLOSED
         NGHTTP2_ERR_STREAM_CLOSING
         NGHTTP2_ERR_STREAM_SHUT_WR
         NGHTTP2_ERR_INVALID_STREAM_ID
+        NGHTTP2_ERR_INVALID_STREAM_STATE
+        NGHTTP2_ERR_INVALID_HEADER_BLOCK
         NGHTTP2_ERR_DEFERRED_DATA_EXIST
         NGHTTP2_ERR_START_STREAM_NOT_ALLOWED
         NGHTTP2_ERR_PUSH_DISABLED
         NGHTTP2_ERR_DATA_EXIST
         NGHTTP2_ERR_SESSION_CLOSING
+        NGHTTP2_ERR_TOO_MANY_SETTINGS
+        NGHTTP2_ERR_FRAME_SIZE_ERROR
         NGHTTP2_ERR_BAD_CLIENT_MAGIC
         NGHTTP2_ERR_FLOODED
         NGHTTP2_ERR_TOO_MANY_CONTINUATIONS
+        NGHTTP2_INTERNAL_ERROR
         NGHTTP2_FLAG_NONE
         NGHTTP2_FLAG_ACK
         NGHTTP2_FLAG_END_STREAM
@@ -206,7 +221,6 @@ cdef extern from "nghttp2/nghttp2.h":
         NGHTTP2_HCAT_REQUEST
         NGHTTP2_HCAT_RESPONSE
         NGHTTP2_HCAT_PUSH_RESPONSE
-        NGHTTP2_HCAT_HEADERS
 
     int nghttp2_session_callbacks_new(
         nghttp2_session_callbacks **callbacks_ptr,
@@ -231,8 +245,17 @@ cdef extern from "nghttp2/nghttp2.h":
     void nghttp2_session_callbacks_set_on_header_callback(
         nghttp2_session_callbacks *, nghttp2_on_header_callback
     )
+    void nghttp2_session_callbacks_set_on_invalid_header_callback(
+        nghttp2_session_callbacks *, nghttp2_on_invalid_header_callback
+    )
     void nghttp2_session_callbacks_set_on_frame_not_send_callback(
         nghttp2_session_callbacks *, nghttp2_on_frame_not_send_callback
+    )
+    void nghttp2_session_callbacks_set_on_frame_send_callback(
+        nghttp2_session_callbacks *, nghttp2_on_frame_send_callback
+    )
+    void nghttp2_session_callbacks_set_rand_callback(
+        nghttp2_session_callbacks *, nghttp2_rand_callback
     )
 
     int nghttp2_option_new(nghttp2_option **option_ptr)
@@ -330,10 +353,6 @@ cdef extern from "nghttp2/nghttp2.h":
         nghttp2_session *, uint8_t, int32_t, uint32_t,
         const uint8_t *, size_t
     )
-    int nghttp2_submit_window_update(
-        nghttp2_session *, uint8_t, int32_t, int32_t
-    )
-    int nghttp2_session_consume_stream(nghttp2_session *, int32_t, size_t)
     int nghttp2_session_consume(nghttp2_session *, int32_t, size_t)
     int nghttp2_session_want_read(nghttp2_session *)
     int nghttp2_session_want_write(nghttp2_session *)
@@ -344,6 +363,9 @@ cdef extern from "nghttp2/nghttp2.h":
     int nghttp2_session_terminate_session(nghttp2_session *, uint32_t)
     int nghttp2_session_terminate_session2(
         nghttp2_session *, int32_t, uint32_t
+    )
+    int nghttp2_session_set_local_window_size(
+        nghttp2_session *, uint8_t, int32_t, int32_t
     )
     int nghttp2_session_upgrade2(
         nghttp2_session *, const uint8_t *, size_t, int, void *

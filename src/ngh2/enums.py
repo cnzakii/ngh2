@@ -61,39 +61,3 @@ class ErrorCode(IntEnum):
     INADEQUATE_SECURITY = 0x0C
     # HTTP/1.1 is required for this request.
     HTTP_1_1_REQUIRED = 0x0D
-
-
-class FrameType(IntEnum):
-    """Values in the frame header's type field.
-
-    Core frame types are defined by RFC 9113, section 11.2. Extension
-    frame types are maintained in the IANA HTTP/2 Frame Type registry:
-    https://www.iana.org/assignments/http2-parameters/http2-parameters.xhtml
-    """
-
-    # Carries stream body octets.
-    DATA = 0x00
-    # Opens a stream or carries a header block.
-    HEADERS = 0x01
-    # Carries the deprecated RFC 7540 priority signal.
-    PRIORITY = 0x02
-    # Terminates one stream with an error code.
-    RST_STREAM = 0x03
-    # Exchanges connection parameters or acknowledges them.
-    SETTINGS = 0x04
-    # Reserves a server-push stream.
-    PUSH_PROMISE = 0x05
-    # Measures liveness or acknowledges a probe.
-    PING = 0x06
-    # Begins graceful or error-driven connection shutdown.
-    GOAWAY = 0x07
-    # Increases a connection or stream flow-control window.
-    WINDOW_UPDATE = 0x08
-    # Continues a header block fragmented across frames.
-    CONTINUATION = 0x09
-    # Advertises an alternative service (RFC 7838).
-    ALTSVC = 0x0A
-    # Advertises authoritative origins (RFC 8336).
-    ORIGIN = 0x0C
-    # Updates extensible priority parameters (RFC 9218).
-    PRIORITY_UPDATE = 0x10

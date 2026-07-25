@@ -6,6 +6,7 @@ import pytest
 from ngh2 import (
     Connection,
     DataReceived,
+    ErrorCode,
     Header,
     InformationalResponseReceived,
     NeverIndexedHeader,
@@ -14,7 +15,9 @@ from ngh2 import (
     ResponseReceived,
     Role,
     SettingsReceived,
+    StreamClosed,
     StreamProtocolError,
+    StreamReset,
     TrailersReceived,
 )
 
@@ -241,7 +244,7 @@ class TestConnection:
         assert b"".join(event.data for event in data_events) == payload
         assert data_events[-1].end_stream
 
-    def test_outbound_message_validation_remains_the_callers_responsibility(self):
+    def test_peer_rejects_an_invalid_outbound_message_block(self):
         client = Connection(Role.CLIENT)
         server = Connection(Role.SERVER)
         client.initiate_connection()
@@ -260,6 +263,25 @@ class TestConnection:
             ],
         )
         exchange(client, server)
+        server.events()
 
         server.send_informational_response(stream_id, [(b"x-example", b"value")])
-        client.send_trailers(stream_id, [(b":path", b"/not-a-valid-trailer")])
+        exchange(server, client)
+
+        assert not any(
+            isinstance(event, InformationalResponseReceived)
+            for event in client.events()
+        )
+
+        server.receive_data(client.data_to_send())
+        client_closed = next(
+            event for event in client.events() if isinstance(event, StreamClosed)
+        )
+        server_events = server.events()
+        reset = next(event for event in server_events if isinstance(event, StreamReset))
+        server_closed = next(
+            event for event in server_events if isinstance(event, StreamClosed)
+        )
+        assert client_closed.error_code == ErrorCode.PROTOCOL_ERROR
+        assert reset.error_code == ErrorCode.PROTOCOL_ERROR
+        assert server_closed.error_code == ErrorCode.PROTOCOL_ERROR

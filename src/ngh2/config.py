@@ -37,7 +37,7 @@ class Configuration:
         max_outbound_ack: Maximum queued SETTINGS and PING acknowledgements
             before the connection is closed. Must be non-negative.
         max_settings: Maximum entries accepted in one SETTINGS frame. Must be
-            non-negative.
+            positive.
         stream_reset_rate_limit: Token-bucket ``(burst, rate)`` for incoming
             RST_STREAM frames on server connections. Each value must fit an
             unsigned 64-bit integer.

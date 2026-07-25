@@ -2,7 +2,7 @@
 title: libnghttp2 architecture and capability boundary
 description: Version-pinned facts about libnghttp2 Sans-I/O behavior, public APIs, HTTP/2 coverage, lifecycle constraints, builds, compatibility, licensing, security, and performance evidence.
 topics: [http2, libnghttp2, sans-io, api, callbacks, flow-control, hpack, compatibility, licensing, security, performance]
-checked_at: 2026-07-18
+checked_at: 2026-07-25
 ---
 
 # libnghttp2 Architecture And Capability Boundary
@@ -19,6 +19,14 @@ stable `v1.69.0` behavior without checking the pinned source.
 - **Observed practice:** [`v1.69.0` release](https://github.com/nghttp2/nghttp2/releases/tag/v1.69.0)
 - **Observed practice:** [`v1.69.0` public header](https://github.com/nghttp2/nghttp2/blob/68cb6900fde14c77f0cd7add0e094a862960eb99/lib/includes/nghttp2/nghttp2.h)
 - **Official guidance:** [current Programmer's Guide](https://nghttp2.org/documentation/programmers-guide.html)
+
+For the function-by-function `v1.69.0` inventory, callback arguments and absent
+behavior, option defaults, source ambiguities, and official deprecation
+replacements, see
+[libnghttp2 public API and callback contracts](libnghttp2-api.md).
+For the session/stream ownership hierarchy, active API effects, receive and send
+pipelines, callback timing, and error domains, see
+[libnghttp2 session state and data flow](libnghttp2-session.md).
 
 ## Sans-I/O Architecture
 
@@ -61,6 +69,12 @@ one thread at a time. Source: [pinned threading guidance](https://github.com/ngh
 Session, callbacks, options, HPACK state, and stream handles are opaque types.
 This lets the implementation change their internal layouts without making those
 layouts part of the public ABI. Source: [opaque declarations](https://github.com/nghttp2/nghttp2/blob/68cb6900fde14c77f0cd7add0e094a862960eb99/lib/includes/nghttp2/nghttp2.h#L135-L176).
+
+One session represents one endpoint's HTTP/2 state for one connection. The
+session owns connection-wide SETTINGS, HPACK, flow control, parsing, output
+scheduling, and all native stream objects. Stream-specific state exists, but
+input and output are driven only at session scope; most stream operations use a
+session pointer plus a stream ID.
 
 ## Input And Output APIs
 
@@ -166,9 +180,14 @@ to outbound scheduling and flow-control availability. A provider can signal EOF,
 defer production, pause, or use the no-copy path. Deferred DATA is resumed with
 `nghttp2_session_resume_data()`.
 
-Only one unfinished DATA or HEADERS provider may be active on a stream. The
-application retains ownership of provider state until completion, cancellation,
-not-send, or stream closure. Source: [`nghttp2_data_source_read_callback2`](https://github.com/nghttp2/nghttp2/blob/68cb6900fde14c77f0cd7add0e094a862960eb99/lib/includes/nghttp2/nghttp2.h#L977-L1056).
+Only one unfinished DATA or HEADERS item may be active on a stream. Submission
+copies the provider members, so the provider struct itself need not be retained.
+Its opaque source and the application state reachable from that source remain
+application-owned and must be usable whenever the library later invokes the
+read callback, until the provider reaches EOF or is discarded with its stream
+or session. Sources:
+[`nghttp2_data_provider2`](https://github.com/nghttp2/nghttp2/blob/68cb6900fde14c77f0cd7add0e094a862960eb99/lib/includes/nghttp2/nghttp2.h#L1080-L1091)
+and [`submit_data2()` ownership](https://github.com/nghttp2/nghttp2/blob/68cb6900fde14c77f0cd7add0e094a862960eb99/lib/includes/nghttp2/nghttp2.h#L4938-L4980).
 
 ## Flow Control
 

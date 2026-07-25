@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://github.com/cnzakii/ngh2/raw/refs/heads/main/docs/assets/ngh2.svg" width="144" height="144" alt="ngh2 logo">
+  <img src="https://github.com/cnzakii/ngh2/raw/refs/heads/main/docs/site/assets/ngh2.svg" width="144" height="144" alt="ngh2 logo">
 </p>
 
 <h1 align="center">ngh2</h1>
 
 <p align="center">
-  <strong>A <a href="https://sans-io.readthedocs.io/">Sans-I/O</a> HTTP/2 protocol library for Python, powered by libnghttp2.</strong>
+  <strong>A fast <a href="https://sans-io.readthedocs.io/">Sans-I/O</a> HTTP/2 library for Python, powered by <a href="https://nghttp2.org/documentation/">libnghttp2</a>.</strong>
 </p>
 
 <p align="center">
@@ -17,120 +17,91 @@
   <a href="https://github.com/cnzakii/ngh2/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-ngh2 is a [Sans-I/O](https://sans-io.readthedocs.io/) HTTP/2 protocol library
-for building clients, servers, proxies, and protocol tools. Feed it bytes from
-any transport and drain typed events; queue HTTP/2 operations and pass the
-resulting bytes back to the transport.
-
-The Python API is implemented in Cython over
-[`libnghttp2`](https://github.com/nghttp2/nghttp2). Wheels bundle libnghttp2,
-so no system installation is required.
+Use a `Connection` to submit requests, responses, body data, and HTTP/2
+controls, feed it bytes from any transport, then handle the resulting events.
+ngh2 takes care of framing, HPACK, flow control, stream state, scheduling, and
+protocol validation.
 
 > ngh2 is currently alpha software. Its public API may change before the first
 > stable release.
 
-## Quick Start
+## Why ngh2?
 
-Add ngh2 to a uv-managed project:
+- **Messages in, events out.** Call methods for requests, responses, bodies,
+  trailers, and connection controls while ngh2 handles HTTP/2 mechanics.
+- **Measured protocol speed.** The checked public-API workloads run roughly
+  20× faster than [h2](https://h2.readthedocs.io/); see the
+  [measurements](#performance).
+
+## Get started
+
+Install ngh2:
 
 ```console
-uv add ngh2
+python -m pip install ngh2
 ```
 
-Or install it with pip:
+Published wheels include the native HTTP/2 engine; no separate system
+installation is required.
 
-```console
-pip install ngh2
-```
+The [first-exchange tutorial](https://cnzakii.github.io/ngh2/latest/learn/first-exchange/)
+runs a complete in-memory client/server exchange and explains its connection
+setup, request, response, and events.
 
-This client-side example queues one request and processes one received chunk.
-`transport` represents caller-owned I/O.
+## Documentation
 
-```python
-import ngh2
-
-connection = ngh2.Connection(ngh2.Role.CLIENT)
-connection.initiate_connection()
-connection.send_request(
-    [
-        (b":method", b"GET"),
-        (b":scheme", b"https"),
-        (b":authority", b"example.com"),
-        (b":path", b"/"),
-    ],
-    end_stream=True,
-)
-transport.write(connection.data_to_send())
-
-connection.receive_data(transport.read())
-transport.write(connection.data_to_send())
-
-for event in connection.events():
-    if isinstance(event, ngh2.ResponseReceived):
-        print(event.stream_id, event.headers)
-    elif isinstance(event, ngh2.DataReceived):
-        print(event.data)
-```
-
-Outbound methods queue protocol operations. `data_to_send()` serializes what
-the current stream state, scheduler, and flow-control windows allow. Body bytes
-that cannot yet be serialized remain queued and are reported by
-`pending_data()`.
-
-Both `receive_data()` and `data_to_send()` can produce events. Drain `events()`
-after either method returns, and pass any bytes from `data_to_send()` to the
-transport.
+- [Learn ngh2](https://cnzakii.github.io/ngh2/latest/learn/first-exchange/)
+  through one connected tutorial sequence.
+- [Integrate asyncio transports](https://cnzakii.github.io/ngh2/latest/guides/transport/)
+  for clients and servers, then add flow control, recovery, and shutdown.
+- [Use advanced HTTP/2](https://cnzakii.github.io/ngh2/latest/advanced/)
+  features only when your application needs them.
+- [Look up the Python API](https://cnzakii.github.io/ngh2/latest/reference/) for
+  exact methods, return values, event fields, and exceptions.
+- [Browse the runnable examples](https://github.com/cnzakii/ngh2/tree/main/examples)
+  without the surrounding tutorial prose.
 
 ## Scope
 
-ngh2 does not open sockets, negotiate TLS or ALPN, choose a concurrency model,
-pool connections, route requests, or implement application timeouts. It
-maintains one HTTP/2 connection while higher-level clients, servers, proxies,
-and test tools decide how to schedule I/O.
+ngh2 maintains one HTTP/2 connection. It does not open sockets, negotiate TLS
+or ALPN, choose a concurrency model, pool connections, route requests, retry
+failed work, or implement application timeouts.
 
-The protocol surface includes:
+The public API covers:
 
 - client and server roles, including h2c upgrade;
 - requests, informational and final responses, DATA, trailers, and server push;
 - SETTINGS, PING, GOAWAY, RST_STREAM, and automatic or manual receive flow
-  control;
-- RFC 9218 extensible priority and the ALTSVC, ORIGIN, and PRIORITY_UPDATE
-  extensions supported by libnghttp2.
+  control; and
+- RFC 9218 priority, extended CONNECT, ALTSVC, ORIGIN, and PRIORITY_UPDATE.
 
-Header names and values are bytes. Callers supply required pseudo-header
-fields in RFC 9113 order. A `Connection` must be driven by one thread or task
-at a time, with operations serialized in protocol order; independent
-connections can run concurrently. ngh2 supports GIL-enabled CPython 3.10
-through 3.14 and free-threaded CPython 3.14t.
+Header names and values are bytes. Drive each `Connection` from one thread or
+task at a time and serialize operations in protocol order. Independent
+connections can run concurrently.
+
+ngh2 supports GIL-enabled CPython 3.10 through 3.14 and free-threaded CPython
+3.14t.
 
 ## Performance
 
-![Python benchmark comparing ngh2 and h2][benchmark-chart]
+The checked `pyperf` run compares complete exchanges through the public APIs of
+ngh2 and h2 4.4.0. It includes stream state transitions, HPACK, flow-control
+accounting, event construction, and frame serialization.
 
-The [`pyperf` benchmark][benchmark-script] compares complete exchanges through
-the public APIs of ngh2 and h2 4.3.0. It reuses initialized connections and
-includes stream state transitions, HPACK, flow control, event construction,
-and frame serialization. It excludes socket, TLS, and event-loop costs.
-
-| Scenario | ngh2 (µs/exchange) | h2 4.3.0 (µs/exchange) | Relative throughput |
+| Scenario | ngh2 (µs/exchange) | h2 4.4.0 (µs/exchange) | Relative throughput |
 | --- | ---: | ---: | ---: |
-| Small request/204 round trip | 2.58 | 65.15 | 25.3× |
-| Header block · 32 fields | 5.92 | 145.05 | 24.5× |
-| Fragmented request · 5 B | 2.85 | 67.18 | 23.6× |
-| Request body · 32 KiB | 7.55 | 131.48 | 17.4× |
-| Multiplexed batch · 100 streams | 1.83 | 52.04 | 28.5× |
+| Small request/204 round trip | 2.56 | 63.20 | 24.7× |
+| Header block · 32 fields | 5.76 | 138.43 | 24.0× |
+| Fragmented request · 5 B | 2.91 | 65.77 | 22.6× |
+| Request body · 32 KiB | 7.63 | 125.26 | 16.4× |
+| Multiplexed batch · 100 streams | 1.80 | 49.88 | 27.7× |
 
-These local pyperf results were produced with CPython 3.12.13 on an Apple M4
-running macOS 26.5. The multiplexed result is normalized per completed stream.
-The [raw pyperf result][benchmark-results] records the samples and environment;
-results on other systems will vary.
+These are protocol-layer measurements, not end-to-end client or server
+benchmarks. They exclude sockets, TLS, event-loop scheduling, and application
+work. Results on other systems and workloads will vary.
 
-## Acknowledgements
-
-[`libnghttp2`](https://nghttp2.org/documentation/) provides HTTP/2 framing,
-HPACK, stream state, flow control, validation, and outbound scheduling. ngh2
-provides the Python object model, typed events, error mapping, buffer lifetimes,
-and distribution packaging.
+Inspect the [benchmark source][benchmark-script] and
+[raw result][benchmark-results].
 
 ## Contributing
 
@@ -142,7 +113,6 @@ guidance.
 ngh2 is MIT licensed. Distributed wheels also contain libnghttp2 under its MIT
 license; both license texts are included in every distribution.
 
-[benchmark-chart]: https://raw.githubusercontent.com/cnzakii/ngh2/main/docs/assets/python-benchmark.svg
 [benchmark-results]: https://github.com/cnzakii/ngh2/blob/main/docs/assets/python-benchmark.json
 [benchmark-script]: https://github.com/cnzakii/ngh2/blob/main/benchmarks/compare_h2.py
 [contributing-guide]: https://github.com/cnzakii/ngh2/blob/main/CONTRIBUTING.md

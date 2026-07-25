@@ -15,7 +15,8 @@ Review the current artifact independently and remain read-only.
    implementation author's conclusion.
 3. Select only relevant lenses: protocol behavior, state/data ownership,
    Python/native boundaries, public API usability, resource and callback
-   safety, tests, packaging, naming, or maintenance cost.
+   safety, tests, packaging, documentation progression, example correctness,
+   API reference coverage, publishing, naming, or maintenance cost.
 4. Use `ngh2-knowledge` when a finding depends on an external fact. Treat
    protocol sources, official guidance, pinned implementation observations, and
    engineering judgment as different evidence classes.
@@ -29,7 +30,11 @@ Review the current artifact independently and remain read-only.
    reference boundary and the caller action enabled by the difference. Report a
    defect when consumers must reconstruct hidden protocol state or no consumer
    action depends on the added surface.
-7. Report findings first, ordered by demonstrated consequence. Then list only
+7. For user documentation, follow the path a new reader is asked to take.
+   Check that examples are runnable and canonical, concepts arrive before they
+   are required, advanced controls remain discoverable, and maintainer-facing
+   verification detail does not displace user guidance.
+8. Report findings first, ordered by demonstrated consequence. Then list only
    genuine open questions or evidence gaps.
 
 ## Finding Standard

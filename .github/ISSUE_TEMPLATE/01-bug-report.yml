@@ -1,0 +1,30 @@
+name: Bug report
+description: Report reproducible incorrect behavior in ngh2
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe what happened, what you expected, and—when possible—the smallest code or HTTP/2 bytes that reproduce it. Include the complete error output.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Which ngh2 version or commit are you using, if known?
+      placeholder: e.g. 0.1.0 or d1f97e3
+    validations:
+      required: false
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include your Python version, operating system, architecture, and installation method.
+      placeholder: e.g. CPython 3.13, macOS arm64, installed from PyPI
+    validations:
+      required: false

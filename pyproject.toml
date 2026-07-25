@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "ngh2"
 dynamic = ["version"]
-description = "Sans-I/O HTTP/2 protocol library for Python, backed by libnghttp2"
+description = "A fast Sans-I/O HTTP/2 library for Python, powered by libnghttp2"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -28,6 +28,7 @@ classifiers = [
 ]
 
 [project.urls]
+Documentation = "https://cnzakii.github.io/ngh2/"
 Changelog = "https://github.com/cnzakii/ngh2/blob/main/CHANGELOG.md"
 Source = "https://github.com/cnzakii/ngh2"
 Issues = "https://github.com/cnzakii/ngh2/issues"
@@ -50,11 +51,16 @@ lint = [
     "ty>=0.0.60,<0.1",
 ]
 test = [
-    "h2>=4.3,<5",
+    "h2>=4.4,<5",
     "pytest>=9.0,<10",
 ]
 benchmark = [
     "pyperf>=2.10,<3",
+]
+docs = [
+    "mike @ git+https://github.com/squidfunk/mike.git",
+    "mkdocstrings-python>=2.0.5,<3",
+    "zensical>=0.0.51,<0.1",
 ]
 coverage = [
     "coverage>=7,<8",
@@ -133,4 +139,4 @@ source = ["ngh2"]
 show_missing = true
 
 [tool.ty.src]
-include = ["src", "tests", "benchmarks"]
+include = ["src", "tests", "benchmarks", "examples"]

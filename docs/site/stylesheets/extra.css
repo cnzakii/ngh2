@@ -1,0 +1,123 @@
+:root,
+body[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #3b6ea5;
+  --md-primary-fg-color--light: #6f94bb;
+  --md-primary-fg-color--dark: #2c5480;
+  --md-accent-fg-color: #3b6ea5;
+  --md-accent-fg-color--transparent: #3b6ea51a;
+  --md-typeset-a-color: #3b6ea5;
+}
+
+body[data-md-color-scheme="slate"][data-md-color-primary] {
+  --md-primary-fg-color: #3b6ea5;
+  --md-primary-fg-color--light: #6f94bb;
+  --md-primary-fg-color--dark: #2c5480;
+  --md-accent-fg-color: #8ab4df;
+  --md-accent-fg-color--transparent: #8ab4df1a;
+  --md-typeset-a-color: #8ab4df;
+}
+
+.md-content__inner.md-typeset {
+  line-height: 1.65;
+}
+
+.md-typeset .md-typeset__table {
+  display: block;
+  width: 100%;
+}
+
+.md-typeset .md-typeset__table > table:not([class]) {
+  display: table;
+  width: 100%;
+}
+
+.md-typeset .home-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem;
+  gap: 1.5rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.md-typeset .home-intro h1 {
+  margin-top: 0;
+  margin-bottom: 0.4em;
+}
+
+.md-typeset .home-intro__tagline {
+  margin-bottom: 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.md-typeset .home-intro__summary {
+  max-width: 34rem;
+}
+
+.md-typeset .home-intro__mark {
+  display: block;
+  width: 100%;
+}
+
+.md-typeset .home-reasons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-block: 1rem 2rem;
+}
+
+.md-typeset .home-reasons > div {
+  padding: 0.3rem 1rem 1rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.7rem;
+  background: var(--md-default-bg-color);
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.md-typeset .home-reasons > div:hover {
+  box-shadow: 0 4px 8px var(--md-default-fg-color--lightest);
+  transform: translateY(-2px);
+}
+
+.md-typeset .home-reasons p:last-child {
+  margin-bottom: 0;
+}
+
+@media screen and (max-width: 44.9844em) {
+  .md-typeset .home-intro {
+    grid-template-columns: minmax(0, 1fr) 4rem;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .md-typeset .home-intro__mark {
+    margin-top: 0.25rem;
+  }
+
+  .md-typeset .home-intro .md-button {
+    min-width: 10rem;
+    text-align: center;
+  }
+
+  .md-typeset .home-reasons {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .md-typeset .home-reasons > div {
+    padding: 0.3rem 1rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset .home-reasons > div {
+    transition: box-shadow 160ms ease;
+  }
+
+  .md-typeset .home-reasons > div:hover {
+    box-shadow: none;
+    transform: none;
+  }
+}

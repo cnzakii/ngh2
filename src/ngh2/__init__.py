@@ -1,14 +1,14 @@
-"""Sans-I/O HTTP/2 protocol library for Python, backed by libnghttp2."""
+"""A fast Sans-I/O HTTP/2 library for Python, powered by libnghttp2."""
 
 from ._core import Connection, pack_settings_payload
 from ._version import __version__
 from .config import Configuration, Role
-from .enums import ErrorCode, FrameType, Setting
+from .enums import ErrorCode, Setting
 from .events import (
     AltSvcReceived,
+    ConnectionClosed,
     DataReceived,
     Event,
-    FrameNotSent,
     GoAwayReceived,
     InformationalResponseReceived,
     OriginReceived,
@@ -44,6 +44,7 @@ __all__ = [
     "AltSvcReceived",
     "Configuration",
     "Connection",
+    "ConnectionClosed",
     "ConnectionClosingError",
     "ConnectionProtocolError",
     "ConnectionStateError",
@@ -51,8 +52,6 @@ __all__ = [
     "DenialOfServiceError",
     "ErrorCode",
     "Event",
-    "FrameNotSent",
-    "FrameType",
     "GoAwayReceived",
     "Header",
     "InformationalResponseReceived",

@@ -1,6 +1,6 @@
 ---
 title: ngh2 engineering knowledge
-description: Source-based reference material for HTTP/2, libnghttp2, Python native extensions, packaging, and engineering conventions.
+description: Source-based reference material for HTTP/2, libnghttp2, Python native extensions, packaging, documentation, tooling, and engineering conventions.
 topics: [index]
 ---
 
@@ -22,13 +22,22 @@ decisions, or project recommendations.
 ## Contents
 
 - Protocol:
-  [libnghttp2 architecture and capability boundary](protocol/libnghttp2.md)
+  [HTTP/2 user model](protocol/http2-user-model.md) and
+  [libnghttp2 architecture and capability boundary](protocol/libnghttp2.md),
+  plus the
+  [version-pinned session state and data-flow model](protocol/libnghttp2-session.md)
+  and
+  [version-pinned public API and callback catalog](protocol/libnghttp2-api.md)
 - Python native extensions:
   [binding and packaging tooling](python-native/binding-tooling.md) and
   [version-pinned reference bindings](python-native/reference-bindings.md)
 - Engineering:
-  [Python and Cython language and API conventions](engineering/language-api.md)
-  and [dependency, vendoring, and license evidence](engineering/dependency-licenses.md)
+  [Python and Cython language and API conventions](engineering/language-api.md),
+  [user-facing technical documentation](engineering/documentation-practice.md),
+  and
+  [dependency, vendoring, and license evidence](engineering/dependency-licenses.md)
+- Documentation tooling:
+  [Zensical behavior and limitations](tooling/zensical.md)
 
 ## Freshness
 

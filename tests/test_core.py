@@ -97,18 +97,33 @@ class TestCore:
         [
             Configuration(peer_max_concurrent_streams=-1),
             Configuration(peer_max_concurrent_streams=1 << 32),
+            Configuration(max_settings=0),
             Configuration(max_settings=-1),
             Configuration(stream_reset_rate_limit=(1 << 64, 1)),
         ],
         ids=[
             "negative-u32",
             "overflow-u32",
+            "zero-settings-limit",
             "negative-settings-limit",
             "overflow-u64",
         ],
     )
-    def test_connection_rejects_native_option_overflow(self, configuration):
-        with pytest.raises(OverflowError):
+    def test_connection_rejects_out_of_range_native_options(self, configuration):
+        with pytest.raises(ValueError):
+            Connection(Role.CLIENT, configuration)
+
+    @pytest.mark.parametrize(
+        "configuration",
+        [
+            Configuration(peer_max_concurrent_streams=cast(int, 1.5)),
+            Configuration(max_settings=cast(int, 1.5)),
+            Configuration(stream_reset_rate_limit=cast(tuple[int, int], (1.5, 1))),
+        ],
+        ids=["u32", "size", "u64"],
+    )
+    def test_connection_rejects_non_integer_native_options(self, configuration):
+        with pytest.raises(TypeError):
             Connection(Role.CLIENT, configuration)
 
     @pytest.mark.parametrize(
@@ -141,6 +156,17 @@ class TestCore:
 
         with pytest.raises(ConnectionStateError, match="already initialized"):
             connection.__init__(Role.SERVER)
+
+    def test_random_seed_failure_keeps_connection_construction_safe(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        def fail_randomness(_: int) -> bytes:
+            raise OSError("randomness unavailable")
+
+        monkeypatch.setattr("ngh2._core.urandom", fail_randomness)
+
+        assert Connection(Role.CLIENT).role is Role.CLIENT
 
     def test_connection_state_errors_share_the_package_base(self):
         connection = Connection(Role.CLIENT)
