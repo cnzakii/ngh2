@@ -4,6 +4,8 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-25
+
 ### Added
 
 - Absolute connection- and stream-level receive-window adjustment with
