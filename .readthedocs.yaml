@@ -1,0 +1,22 @@
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.12"
+  jobs:
+    install:
+      - python -m pip install uv
+      - uv sync --locked --no-dev --group docs
+    pre_build:
+      - sed -i "s|^site_url = .*|site_url = \"$READTHEDOCS_CANONICAL_URL\"|" zensical.toml
+    build:
+      html:
+        - uv run --locked --no-dev --group docs zensical build --strict
+    post_build:
+      - mkdir -p "$READTHEDOCS_OUTPUT/html"
+      - cp --recursive site/. "$READTHEDOCS_OUTPUT/html/"
+
+submodules:
+  include:
+    - vendor/nghttp2

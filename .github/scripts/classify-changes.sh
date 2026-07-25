@@ -1,20 +1,21 @@
 #!/bin/sh
 
+set -eu
+
 classify() {
     code=false
     docs=false
 
     while IFS= read -r path; do
         case "$path" in
-            .github/scripts/publish-docs.sh | \
+            .readthedocs.yaml | \
             .github/workflows/ci.yml | \
-            .github/workflows/publish-docs.yml | \
             .gitmodules | .python-version | CMakeLists.txt | \
             CHANGELOG.md | CONTRIBUTING.md | LICENSE | README.md | \
-            SECURITY.md | docs/assets/* | \
+            SECURITY.md | docs/assets/* | docs/overrides/* | \
             docs/griffe_runtime_docstrings.py | docs/site/* | \
             examples/* | pyproject.toml | src/ngh2/* | uv.lock | \
-            vendor/nghttp2/* | zensical.toml)
+            vendor/nghttp2 | vendor/nghttp2/* | zensical.toml)
                 docs=true
                 ;;
         esac
@@ -23,10 +24,8 @@ classify() {
             docs/griffe_runtime_docstrings.py | examples/python/*)
                 code=true
                 ;;
-            .agents/* | .github/ISSUE_TEMPLATE/* | \
+            .agents/* | .github/ISSUE_TEMPLATE/* | .readthedocs.yaml | \
             .github/pull_request_template.md | \
-            .github/scripts/publish-docs.sh | \
-            .github/workflows/publish-docs.yml | \
             CODE_OF_CONDUCT.md | docs/* | zensical.toml | *.md | LICENSE*)
                 ;;
             *)
@@ -54,6 +53,10 @@ docs=false"
 docs=false"
     test "$(printf '%s\n' docs/site/index.md | classify)" = "code=false
 docs=true"
+    test "$(printf '%s\n' docs/overrides/main.html | classify)" = "code=false
+docs=true"
+    test "$(printf '%s\n' SECURITY.md | classify)" = "code=false
+docs=true"
     test "$(printf '%s\n' tests/test_connection.py | classify)" = "code=true
 docs=false"
     test "$(printf '%s\n' src/ngh2/_core.pyx | classify)" = "code=true
@@ -63,6 +66,10 @@ docs=true"
     test "$(printf '%s\n' docs/griffe_runtime_docstrings.py | classify)" = "code=true
 docs=true"
     test "$(printf '%s\n' .github/workflows/ci.yml | classify)" = "code=true
+docs=true"
+    test "$(printf '%s\n' .readthedocs.yaml | classify)" = "code=false
+docs=true"
+    test "$(printf '%s\n' vendor/nghttp2 | classify)" = "code=true
 docs=true"
     test "$(printf '%s\n' README.md tests/test_connection.py | classify)" = "code=true
 docs=true"

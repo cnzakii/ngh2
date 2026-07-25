@@ -2,7 +2,7 @@
 site_name = "ngh2"
 site_description = "A fast Sans-I/O HTTP/2 library for Python."
 site_author = "ngh2 contributors"
-site_url = "https://cnzakii.github.io/ngh2/"
+site_url = "https://ngh2.readthedocs.io/"
 copyright = "Copyright &copy; 2026 ngh2 contributors"
 docs_dir = "docs/site"
 site_dir = "site"
@@ -42,17 +42,11 @@ nav = [
     ] },
 ]
 
-[project.extra.version]
-provider = "mike"
-default = "latest"
-alias = true
-
 [project.theme]
 variant = "modern"
 language = "en"
 logo = "assets/ngh2.svg"
 favicon = "assets/ngh2.svg"
-custom_dir = "docs/overrides"
 features = [
     "content.code.copy",
     "navigation.footer",

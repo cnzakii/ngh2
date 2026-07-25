@@ -15,22 +15,28 @@ jobs:
   validate:
     name: Validate release
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Verify tag and package version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           version="$(python3 -c 'import runpy; print(runpy.run_path("src/ngh2/_version.py")["__version__"])')"
+          grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' <<< "$version"
           test "$RELEASE_TAG" = "v$version"
           grep -Fq "## [$version] - " CHANGELOG.md
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
 
   wheels:
     name: Wheels on ${{ matrix.platform }}
     needs: validate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -48,14 +54,14 @@ jobs:
           - platform: windows-aarch64
             os: windows-11-arm
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           submodules: true
-      - uses: pypa/cibuildwheel@v4.1.0
-      - uses: actions/upload-artifact@v7
+      - uses: pypa/cibuildwheel@294735312765b09d24a2fbec22660ce817587d55 # v4.1.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: wheels-${{ matrix.platform }}
+          name: distributions-${{ matrix.platform }}
           path: wheelhouse/*.whl
           if-no-files-found: error
 
@@ -63,12 +69,13 @@ jobs:
     name: Source distribution
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@v8.3.2
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: false
       - run: uv build --sdist
@@ -77,9 +84,9 @@ jobs:
           uv venv "$RUNNER_TEMP/ngh2-sdist-test"
           uv pip install --python "$RUNNER_TEMP/ngh2-sdist-test/bin/python" dist/*.tar.gz
           "$RUNNER_TEMP/ngh2-sdist-test/bin/python" -c "import ngh2"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: sdist
+          name: distributions-sdist
           path: dist/*.tar.gz
           if-no-files-found: error
 
@@ -87,17 +94,20 @@ jobs:
     name: Publish to PyPI
     needs: [wheels, sdist]
     runs-on: ubuntu-latest
-    environment: release
+    timeout-minutes: 10
+    environment:
+      name: release
+      url: https://pypi.org/p/ngh2
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: "*"
+          pattern: distributions-*
           path: dist
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
         with:
           packages-dir: dist/
 
@@ -105,6 +115,7 @@ jobs:
     name: Publish GitHub release
     needs: publish-pypi
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -114,12 +125,3 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes
-
-  publish-docs:
-    name: Publish documentation
-    needs: github-release
-    permissions:
-      contents: write
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/publish-docs.yml
