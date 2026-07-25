@@ -12,6 +12,8 @@ User-visible changes to ngh2 are recorded here.
 
 ### Changed
 
+- The outbound body queue query is now `Connection.queued_body_size()` and
+  reports only body bytes still waiting for HTTP/2 framing.
 - `StreamClosed.local_error` now reports a delayed local stream-operation
   failure alongside the terminal HTTP/2 error code.
 - Invalid peer header fields now produce stream-scoped protocol failure instead

@@ -16,7 +16,8 @@ that transport.
 | initialize or drive a connection | `Connection.initiate_connection()`, `receive_data()`, `events()`, `data_to_send()` |
 | send an HTTP message | `send_request()`, `send_response()`, `send_data()`, `send_trailers()` |
 | react to peer activity | the event classes under **Events** |
-| control buffering | `pending_data()`, `acknowledge_received_data()`, and `set_local_window_size()` |
+| bound outbound body input | `queued_body_size()` and the [flow-control guide](guides/flow-control.md) |
+| manage inbound flow control | `acknowledge_received_data()` and `set_local_window_size()` |
 | shut down | `send_shutdown_notice()`, `send_goaway()`, `terminate_connection()` |
 | use optional protocol controls | the [Advanced HTTP/2 guides](advanced.md) |
 | tune limits | `Configuration` |

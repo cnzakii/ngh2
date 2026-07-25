@@ -27,7 +27,7 @@ uv sync --locked
 | 4 | [`message_lifecycle.py`](python/message_lifecycle.py) · [tutorial](../docs/site/learn/message-lifecycle.md) | bodies, informational responses, trailers, explicit end-of-stream, and cancellation |
 | 5 | [`asyncio_client.py`](python/asyncio_client.py) · [guide](../docs/site/guides/transport.md) | negotiate TLS ALPN and preserve the read-event-write-event driver cycle |
 | 6 | [`asyncio_server.py`](python/asyncio_server.py) · [guide](../docs/site/guides/server.md) | accept TLS connections, isolate connection ownership, and respond after each request ends |
-| 7 | [`manual_flow_control.py`](python/manual_flow_control.py) · [guide](../docs/site/guides/flow-control.md) | pause at the receive window and resume only after application consumption |
+| 7 | [`manual_flow_control.py`](python/manual_flow_control.py) · [guide](../docs/site/guides/flow-control.md) | keep outbound body chunks bounded and release receive capacity only after consumption |
 | 8 | [Event handling](../docs/site/guides/events.md) | what every event means and the action that normally follows it |
 | 9 | [`graceful_shutdown.py`](python/graceful_shutdown.py) · [guide](../docs/site/guides/errors-and-shutdown.md) | two-stage GOAWAY while an accepted stream finishes |
 

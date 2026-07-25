@@ -86,7 +86,7 @@ def test_remote_reset_releases_unsent_body_data() -> None:
     client.send_data(stream_id, b"x" * 100_000, end_stream=True)
     server.receive_data(client.data_to_send())
     server.events()
-    assert client.pending_data(stream_id) > 0
+    assert client.queued_body_size(stream_id) > 0
 
     server.reset_stream(stream_id, ErrorCode.CANCEL)
     client.receive_data(server.data_to_send())
@@ -95,8 +95,8 @@ def test_remote_reset_releases_unsent_body_data() -> None:
     assert any(isinstance(event, StreamReset) for event in events)
     closed = next(event for event in events if isinstance(event, StreamClosed))
     assert closed.local_error is None
-    assert client.pending_data(stream_id) == 0
-    assert client.pending_data() == 0
+    assert client.queued_body_size(stream_id) == 0
+    assert client.queued_body_size() == 0
 
 
 def test_invalid_regular_header_closes_only_its_stream() -> None:
@@ -229,7 +229,7 @@ def test_terminate_connection_stops_both_session_directions() -> None:
     server.send_data(stream_id, b"queued")
 
     server.terminate_connection(ErrorCode.INTERNAL_ERROR)
-    assert server.pending_data() == 0
+    assert server.queued_body_size() == 0
     with pytest.raises(ConnectionStateError):
         server.ping()
 

@@ -68,7 +68,7 @@ terminal `StreamClosed`.
 | `SettingsAcknowledged` | the peer acknowledged the oldest local SETTINGS update | treat the corresponding local setting as active and inspect `local_settings` when needed |
 | `PingReceived` | the peer sent a liveness probe | no protocol response is needed; ngh2 queues the acknowledgement automatically |
 | `PingAcknowledged` | the peer echoed an eight-byte PING payload | match the payload to the caller-owned timer or health check |
-| `WindowUpdated` | peer WINDOW_UPDATE increased stream or connection send capacity | drive `data_to_send()` and resume a producer when `pending_data()` falls below policy limits |
+| `WindowUpdated` | peer WINDOW_UPDATE increased stream or connection send capacity | drive `data_to_send()`, then reevaluate blocked producers under your [body-queue policy](flow-control.md) |
 | `GoAwayReceived` | the peer began or completed connection shutdown | stop new streams, open a replacement connection, and decide which unprocessed requests are retryable |
 | `ConnectionClosed` | the HTTP/2 state machine needs no more input and has no output left to produce | after writing any bytes returned by the same `data_to_send()` call, close the transport and release connection state |
 | `AltSvcReceived` | raw alternative-service data arrived | parse and cache it only if the client implements Alt-Svc policy and origin authentication |

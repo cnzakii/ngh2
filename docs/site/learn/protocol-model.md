@@ -78,8 +78,8 @@ handling input even when the application has nothing new to send.
 | framing and HPACK | TLS, certificate checks, and ALPN |
 | protocol validation | event loop, threads, and task scheduling |
 | HTTP/2 flow-control windows | transport write buffering |
-| outbound frame scheduling | request routing, retries, and timeouts |
-| protocol events | application body buffering and consumption |
+| outbound body queue and frame scheduling | body production limits, request routing, retries, and timeouts |
+| protocol events | downstream body buffering and consumption |
 
 One `Connection` must be driven by one thread or task at a time. Independent
 connections can run concurrently; operations on the same connection must be
