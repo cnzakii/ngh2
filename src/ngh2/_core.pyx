@@ -104,7 +104,7 @@ def pack_settings_payload(settings):
 cdef class _BodySource:
     cdef object chunks
     cdef Py_ssize_t offset
-    cdef size_t pending
+    cdef size_t queued_size
     cdef bint ended
     cdef bint deferred
     cdef object trailers
@@ -112,7 +112,7 @@ cdef class _BodySource:
     def __cinit__(self):
         self.chunks = deque()
         self.offset = 0
-        self.pending = 0
+        self.queued_size = 0
         self.ended = False
         self.deferred = False
         self.trailers = None
@@ -155,7 +155,7 @@ cdef class Connection:
     cdef bint _local_extensible_priority
     cdef list _events
     cdef dict _bodies
-    cdef size_t _pending_data
+    cdef size_t _queued_body_size
     cdef list _current_headers
     cdef size_t _current_header_size
     cdef dict _data_chunks
@@ -179,7 +179,7 @@ cdef class Connection:
         self._local_extensible_priority = False
         self._events = []
         self._bodies = {}
-        self._pending_data = 0
+        self._queued_body_size = 0
         self._current_headers = []
         self._current_header_size = 0
         self._data_chunks = {}
@@ -584,7 +584,7 @@ cdef class Connection:
             self._raise_native_error(result)
 
     def send_trailers(self, stream_id, headers):
-        """Queue trailers after all pending stream body bytes.
+        """Queue trailers after all queued stream body bytes.
 
         Args:
             stream_id: Stream whose local direction will be ended.
@@ -660,7 +660,8 @@ cdef class Connection:
 
         Args:
             stream_id: Stream whose body receives the bytes.
-            data: Body bytes retained until they are serialized into DATA frames.
+            data: Body bytes retained in the outbound queue until the HTTP/2
+                engine takes them for DATA framing.
             end_stream: Whether these are the final body bytes.
 
         Raises:
@@ -685,8 +686,8 @@ cdef class Connection:
         chunk = data if isinstance(data, bytes) else bytes(data)
         if chunk:
             body.chunks.append(chunk)
-            body.pending += len(chunk)
-            self._pending_data += len(chunk)
+            body.queued_size += len(chunk)
+            self._queued_body_size += len(chunk)
         body.ended = end_stream
         if body.deferred and (chunk or end_stream):
             result = _nghttp2.nghttp2_session_resume_data(self._session, stream_id)
@@ -1197,14 +1198,15 @@ cdef class Connection:
             return False
         return bool(_nghttp2.nghttp2_session_check_request_allowed(self._session))
 
-    def pending_data(self, stream_id=None):
-        """Return queued body bytes not yet serialized into DATA frames.
+    def queued_body_size(self, stream_id=None):
+        """Return body bytes still waiting in ngh2's outbound queue.
 
         Args:
             stream_id: Stream to query, or ``None`` for the connection total.
 
         Returns:
-            The exact number of queued application body bytes.
+            Body bytes accepted by ``send_data()`` that the HTTP/2 engine has
+            not yet taken. This excludes framed output and transport buffers.
 
         Raises:
             TypeError: If ``stream_id`` is not an integer or ``None``.
@@ -1213,11 +1215,11 @@ cdef class Connection:
         cdef _BodySource body
 
         if stream_id is None:
-            return self._pending_data
+            return self._queued_body_size
 
         stream_id = _stream_id(stream_id)
         body = self._bodies.get(stream_id)
-        return 0 if body is None else body.pending
+        return 0 if body is None else body.queued_size
 
     @property
     def remote_window_size(self):
@@ -1393,7 +1395,7 @@ cdef class Connection:
     cdef void _discard_pending_state(self):
         """Release Python-owned protocol state that can no longer progress."""
         self._bodies.clear()
-        self._pending_data = 0
+        self._queued_body_size = 0
         self._current_headers.clear()
         self._current_header_size = 0
         self._data_chunks.clear()
@@ -1895,9 +1897,9 @@ cdef _nghttp2.nghttp2_ssize _read_body(
 ) noexcept:
     """Copy queued body bytes and emit the stream's terminal marker.
 
-    Pending-byte counters are reduced only after bytes enter the serialized
-    output. Empty, unfinished queues defer DATA generation until the
-    application queues more bytes.
+    Queue counters are reduced when the engine pulls bytes into a DATA frame.
+    Empty, unfinished queues defer DATA generation until the application
+    queues more bytes.
     """
     cdef Connection connection = <Connection>user_data
     cdef _BodySource body
@@ -1916,8 +1918,8 @@ cdef _nghttp2.nghttp2_ssize _read_body(
             memcpy(buffer + copied, PyBytes_AS_STRING(chunk) + body.offset, take)
             copied += take
             body.offset += take
-            body.pending -= take
-            connection._pending_data -= take
+            body.queued_size -= take
+            connection._queued_body_size -= take
             if body.offset == len(chunk):
                 body.chunks.popleft()
                 body.offset = 0
@@ -2357,7 +2359,7 @@ cdef int _stream_closed(
     try:
         body = connection._bodies.pop(stream_id, None)
         if body is not None:
-            connection._pending_data -= body.pending
+            connection._queued_body_size -= body.queued_size
         connection._data_chunks.pop(stream_id, None)
         connection._responses.discard(stream_id)
         if connection._local_stream_errors:

@@ -253,7 +253,7 @@ class TestControlFrames:
         with pytest.raises(StreamUnavailableError):
             getattr(server, method)(99, [(b":status", b"200")])
 
-        assert server.pending_data() == 0
+        assert server.queued_body_size() == 0
 
     def test_builtin_extension_frames_are_exposed_as_events(self):
         client, server = handshake()

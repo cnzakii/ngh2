@@ -71,8 +71,8 @@ timeouts, or the decision to close an unresponsive connection.
 | `want_read`, `want_write` | whether protocol processing can still make progress | report socket readability or writability |
 | `next_stream_id` | the next locally initiated ID | reserve that ID; use the ID returned by `send_request()` or `send_push_promise()` |
 | `can_send_request` | whether a client may currently create a request | guarantee a later call after GOAWAY; still handle `ConnectionClosingError` |
-| `pending_data()` | body bytes retained but not yet framed | include bytes already returned to the transport |
-| `remote_window_size`, `stream_remote_window_size()` | peer capacity for outbound DATA | replace `pending_data()` or producer watermarks |
+| `queued_body_size()` | body payload still waiting in ngh2's outbound queue | report framing, transport, or delivery progress; see [flow control and backpressure](../guides/flow-control.md) |
+| `remote_window_size`, `stream_remote_window_size()` | peer capacity for outbound DATA | reserve capacity for a producer or replace its queue policy |
 | `local_window_size`, `stream_local_window_size()` | remaining inbound DATA capacity | show downstream application queue capacity |
 | `local_settings`, `remote_settings` | acknowledged local and effective peer settings | describe application policy |
 

@@ -23,6 +23,18 @@ def handshake(client: ngh2.Connection, server: ngh2.Connection) -> None:
     server.events()
 
 
+def consume_available_data(connection: ngh2.Connection) -> int:
+    """Consume current DATA events and release exactly that receive capacity."""
+    consumed = 0
+    for event in connection.events():
+        if isinstance(event, ngh2.DataReceived):
+            consumed += len(event.data)
+            # Manual mode ties WINDOW_UPDATE to application consumption. Frame
+            # padding is accounted for by ngh2 and must not be added here.
+            connection.acknowledge_received_data(len(event.data), event.stream_id)
+    return consumed
+
+
 def main() -> None:
     client = ngh2.Connection(ngh2.Role.CLIENT)
     # Manual receive-window updates let downstream consumption control when
@@ -41,29 +53,40 @@ def main() -> None:
             (b":path", b"/upload"),
         ],
     )
-    # The body is larger than the initial stream window, so ngh2 must retain
-    # some bytes until the server releases receive-window capacity.
     body = b"x" * 70_000
-    client.send_data(stream_id, body, end_stream=True)
-
+    chunk_size = 20_000
+    offset = 0
     received = 0
-    while client.pending_data(stream_id):
+
+    # Submit one bounded chunk at a time. WINDOW_UPDATE frames stay at the
+    # server for this short demonstration, so the fourth chunk exhausts the
+    # initial 65,535-byte stream window and leaves a visible queued tail.
+    while offset < len(body) and client.queued_body_size(stream_id) == 0:
+        end = min(offset + chunk_size, len(body))
+        client.send_data(
+            stream_id,
+            body[offset:end],
+            end_stream=end == len(body),
+        )
+        offset = end
         transfer(client, server)
+        received += consume_available_data(server)
 
-        for event in server.events():
-            if isinstance(event, ngh2.DataReceived):
-                received += len(event.data)
-                # Acknowledge only bytes the application has consumed. Frame
-                # padding is accounted for by ngh2 and must not be added here.
-                server.acknowledge_received_data(len(event.data), event.stream_id)
+    print(
+        f"application consumed {received:,} bytes; "
+        f"{client.queued_body_size(stream_id):,} remain queued"
+    )
 
-        # The acknowledgement queues WINDOW_UPDATE frames. Returning them to
-        # the client lets its next data_to_send() call resume the upload.
-        transfer(server, client)
-        client.events()
+    # Return the accumulated WINDOW_UPDATE frames. The next output drive can
+    # then take the queued tail and complete the request body.
+    transfer(server, client)
+    client.events()
+    while client.queued_body_size(stream_id):
+        transfer(client, server)
+        received += consume_available_data(server)
         print(
             f"application consumed {received:,} bytes; "
-            f"{client.pending_data(stream_id):,} remain queued"
+            f"{client.queued_body_size(stream_id):,} remain queued"
         )
 
     print(f"upload complete: {received:,} bytes")

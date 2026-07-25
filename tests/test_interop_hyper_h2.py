@@ -77,7 +77,7 @@ class TestHyperH2Interop:
         ended = False
 
         for _ in range(10):
-            if not client.pending_data(stream_id):
+            if not client.queued_body_size(stream_id):
                 break
             events = server.receive_data(client.data_to_send())
             for event in events:
@@ -96,4 +96,4 @@ class TestHyperH2Interop:
 
         assert received == body
         assert ended
-        assert client.pending_data() == 0
+        assert client.queued_body_size() == 0

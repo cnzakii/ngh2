@@ -75,11 +75,11 @@ class TestConnection:
             ],
         )
         client.send_data(stream_id, b"body", end_stream=True)
-        assert client.pending_data(stream_id) == 4
-        assert client.pending_data() == 4
+        assert client.queued_body_size(stream_id) == 4
+        assert client.queued_body_size() == 4
 
         exchange(client, server)
-        assert client.pending_data(stream_id) == 0
+        assert client.queued_body_size(stream_id) == 0
         request_events = server.events()
         request = next(
             event for event in request_events if isinstance(event, RequestReceived)
@@ -167,7 +167,7 @@ class TestConnection:
         )
         assert pushed.promised_stream_id == promised_id
 
-    def test_pending_data_tracks_native_flow_control(self):
+    def test_queued_body_size_tracks_flow_control_blocked_body(self):
         client = Connection(Role.CLIENT)
         server = Connection(Role.SERVER)
         client.initiate_connection()
@@ -190,13 +190,13 @@ class TestConnection:
         client.send_data(stream_id, body, end_stream=True)
 
         first_output = client.data_to_send()
-        assert client.pending_data(stream_id) > 0
+        assert client.queued_body_size(stream_id) > 0
         server.receive_data(first_output)
         client.receive_data(server.data_to_send())
         second_output = client.data_to_send()
 
         assert second_output
-        assert client.pending_data(stream_id) == 0
+        assert client.queued_body_size(stream_id) == 0
 
     def test_fragmented_input_emits_one_event_per_data_frame(self):
         client = Connection(Role.CLIENT)

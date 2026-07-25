@@ -48,7 +48,7 @@ class TestResourceLimits:
         with pytest.raises(ConnectionStateError):
             server.data_to_send(0)
 
-    def test_failed_connection_releases_pending_body_data(self):
+    def test_failed_connection_releases_queued_body_data(self):
         client = Connection(
             Role.CLIENT,
             Configuration(max_inbound_header_count=1),
@@ -75,10 +75,10 @@ class TestResourceLimits:
         with pytest.raises(DenialOfServiceError):
             client.receive_data(server.data_to_send())
 
-        assert client.pending_data() == 0
-        assert client.pending_data(stream_id) == 0
+        assert client.queued_body_size() == 0
+        assert client.queued_body_size(stream_id) == 0
 
-    def test_unsent_response_headers_release_pending_body_data(self):
+    def test_unsent_response_headers_release_queued_body_data(self):
         client = Connection(Role.CLIENT)
         server = Connection(
             Role.SERVER,
@@ -102,7 +102,7 @@ class TestResourceLimits:
         )
         server.send_data(stream_id, b"body", end_stream=True)
 
-        assert server.pending_data(stream_id) == 4
+        assert server.queued_body_size(stream_id) == 4
         assert server.data_to_send()
         closed = next(
             event for event in server.events() if isinstance(event, StreamClosed)
@@ -110,8 +110,8 @@ class TestResourceLimits:
         assert closed.stream_id == stream_id
         assert closed.error_code == ErrorCode.INTERNAL_ERROR
         assert isinstance(closed.local_error, StreamProtocolError)
-        assert server.pending_data(stream_id) == 0
-        assert server.pending_data() == 0
+        assert server.queued_body_size(stream_id) == 0
+        assert server.queued_body_size() == 0
 
     def test_unsent_request_headers_close_the_reserved_stream(self):
         client = Connection(
