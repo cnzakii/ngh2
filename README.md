@@ -25,13 +25,16 @@ protocol validation.
 > ngh2 is currently alpha software. Its public API may change before the first
 > stable release.
 
-## Why ngh2?
+## Why ngh2
 
 - **Messages in, events out.** Call methods for requests, responses, bodies,
   trailers, and connection controls while ngh2 handles HTTP/2 mechanics.
 - **Measured protocol speed.** The checked public-API workloads run roughly
   20× faster than [h2](https://h2.readthedocs.io/); see the
   [measurements](#performance).
+- **A proven foundation.**
+  [libnghttp2](https://nghttp2.org/documentation/) provides the actively
+  maintained HTTP/2 protocol engine underneath ngh2.
 
 ## Get started
 
