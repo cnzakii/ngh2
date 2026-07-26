@@ -47,19 +47,19 @@ python -m pip install ngh2
 Published wheels include the native HTTP/2 engine; no separate system
 installation is required.
 
-The [first-exchange tutorial](https://cnzakii.github.io/ngh2/latest/learn/first-exchange/)
+The [first-exchange tutorial](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/)
 runs a complete in-memory client/server exchange and explains its connection
 setup, request, response, and events.
 
 ## Documentation
 
-- [Learn ngh2](https://cnzakii.github.io/ngh2/latest/learn/first-exchange/)
+- [Learn ngh2](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/)
   through one connected tutorial sequence.
-- [Integrate asyncio transports](https://cnzakii.github.io/ngh2/latest/guides/transport/)
+- [Integrate asyncio transports](https://ngh2.readthedocs.io/en/stable/guides/transport/)
   for clients and servers, then add flow control, recovery, and shutdown.
-- [Use advanced HTTP/2](https://cnzakii.github.io/ngh2/latest/advanced/)
+- [Use advanced HTTP/2](https://ngh2.readthedocs.io/en/stable/advanced/)
   features only when your application needs them.
-- [Look up the Python API](https://cnzakii.github.io/ngh2/latest/reference/) for
+- [Look up the Python API](https://ngh2.readthedocs.io/en/stable/reference/) for
   exact methods, return values, event fields, and exceptions.
 - [Browse the runnable examples](https://github.com/cnzakii/ngh2/tree/main/examples)
   without the surrounding tutorial prose.

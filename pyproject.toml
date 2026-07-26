@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 [project.urls]
-Documentation = "https://cnzakii.github.io/ngh2/"
+Documentation = "https://ngh2.readthedocs.io/"
 Changelog = "https://github.com/cnzakii/ngh2/blob/main/CHANGELOG.md"
 Source = "https://github.com/cnzakii/ngh2"
 Issues = "https://github.com/cnzakii/ngh2/issues"
@@ -58,7 +58,6 @@ benchmark = [
     "pyperf>=2.10,<3",
 ]
 docs = [
-    "mike @ git+https://github.com/squidfunk/mike.git",
     "mkdocstrings-python>=2.0.5,<3",
     "zensical>=0.0.51,<0.1",
 ]
@@ -71,12 +70,13 @@ coverage = [
 minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
 sdist.include = ["vendor/nghttp2/**", "!vendor/nghttp2/.git"]
+sdist.exclude = [".github/**"]
 wheel.exclude = ["**/*.pxd", "**/*.pyx"]
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-* cp314t-*"
 skip = ["*-win32", "*-musllinux_*"]
-before-test = 'python -m pip install --group "{project}/pyproject.toml:test"'
+test-groups = ["test"]
 test-command = 'pytest {project}/tests -m "not h2spec"'
 
 [tool.uv]

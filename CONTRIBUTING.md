@@ -77,11 +77,10 @@ matching guide, and add deterministic programs to `tests/test_examples.py`.
 Do not replace a runnable lesson with assertion-oriented test code or hide its
 setup in a shared test helper.
 
-Pull requests build the documentation with strict validation. Merges to `main`
-publish the `dev` documentation, and version tags publish the corresponding
-`X.Y` documentation and update `latest` when appropriate. Configure GitHub
-Pages to use GitHub Actions before the first deployment; do not edit
-`gh-pages` manually.
+Pull requests build the documentation with strict validation. Read the Docs
+also builds pull request previews, `latest` from `main`, `stable` from the
+newest release, and versioned documentation from release tags using
+`.readthedocs.yaml`.
 
 ## Releases
 

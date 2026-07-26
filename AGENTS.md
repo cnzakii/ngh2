@@ -81,9 +81,10 @@ installed and the changed behavior affects protocol interoperability.
   used.
 - Keep `docs/knowledge` out of the published site. Use it to verify facts, not
   as user-facing prose or a record of project decisions.
-- Do not edit the generated `gh-pages` branch manually. CI publishes
-  development documentation from `main` and release documentation from version
-  tags.
+- Read the Docs publishes development documentation from `main`, pull request
+  previews, and versioned documentation from release tags using
+  `.readthedocs.yaml`. Keep GitHub Actions responsible for validation rather
+  than maintaining a second publishing path.
 - Keep generated C files, build output, local environments, editor state,
   temporary reports, and personal instructions out of version control.
 
