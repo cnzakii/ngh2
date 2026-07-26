@@ -84,8 +84,29 @@ newest release, and versioned documentation from release tags using
 
 ## Releases
 
-Prepare a release on `main` by updating `src/ngh2/_version.py` and moving the
-relevant changelog entries under `## [X.Y.Z] - YYYY-MM-DD`. Then tag that commit:
+ngh2 publishes final releases as `X.Y.Z`:
+
+- increment `X` for incompatible public API or behavior changes after the
+  public API becomes stable at 1.0;
+- increment `Y` for backward-compatible public functionality; before 1.0,
+  also use it for intentional incompatible public changes;
+- increment `Z` for backward-compatible fixes for bugs, security issues,
+  installation and packaging failures, or faults in published release
+  artifacts or metadata.
+
+A security fix that must break public compatibility follows the incompatible
+change rule instead.
+
+Documentation, tests, CI, and internal tooling changes do not by themselves
+trigger a package release. Development documentation is published from `main`
+as `latest`, and those changes are included in the next qualifying release.
+Security issues and broken published artifacts may require an immediate
+maintenance release; otherwise, related changes are released together.
+
+Every release starts with a pull request that updates `src/ngh2/_version.py`
+and moves the relevant changelog entries under
+`## [X.Y.Z] - YYYY-MM-DD`. Tag the release pull request's merge commit only
+after the required checks have passed and no release-blocking issue is known:
 
 ```console
 git tag -a vX.Y.Z -m "vX.Y.Z"
@@ -97,9 +118,8 @@ them to PyPI through Trusted Publishing, and creates the GitHub release. PyPI
 files are immutable; fix a broken release with a new version rather than
 reusing an uploaded filename.
 
-Before the first release, register a pending PyPI Trusted Publisher for the
-`release.yml` workflow and its `release` environment, then create that protected
-environment on GitHub.
+After publication, verify the PyPI files and installation, the GitHub release,
+and the `stable` documentation build on Read the Docs.
 
 By contributing, you agree that your contribution is licensed under the
 project's [MIT License](LICENSE).

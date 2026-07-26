@@ -4,6 +4,17 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-26
+
+This maintenance release changes distribution metadata, documentation hosting,
+and release infrastructure only. The Python API and HTTP/2 behavior are
+unchanged from 0.2.0.
+
+### Fixed
+
+- Published package metadata and README links now lead to stable, versioned
+  documentation on Read the Docs after the hosting migration.
+
 ## [0.2.0] - 2026-07-25
 
 ### Added

@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 [project.urls]
-Documentation = "https://ngh2.readthedocs.io/"
+Documentation = "https://ngh2.readthedocs.io/en/stable/"
 Changelog = "https://github.com/cnzakii/ngh2/blob/main/CHANGELOG.md"
 Source = "https://github.com/cnzakii/ngh2"
 Issues = "https://github.com/cnzakii/ngh2/issues"
