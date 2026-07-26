@@ -6,16 +6,23 @@ build:
     python: "3.12"
   jobs:
     install:
-      - python -m pip install uv
       - uv sync --locked --no-dev --group docs
     pre_build:
       - sed -i "s|^site_url = .*|site_url = \"$READTHEDOCS_CANONICAL_URL\"|" zensical.toml
     build:
       html:
-        - uv run --locked --no-dev --group docs zensical build --strict
+        - zensical build --strict
     post_build:
       - mkdir -p "$READTHEDOCS_OUTPUT/html"
       - cp --recursive site/. "$READTHEDOCS_OUTPUT/html/"
+
+python:
+  # Provision uv; generic builders run dependency sync in build.jobs.install.
+  install:
+    - method: uv
+      command: sync
+      groups:
+        - docs
 
 submodules:
   include:
