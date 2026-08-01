@@ -24,6 +24,38 @@ def begin(client: Connection, server: Connection) -> None:
 
 
 class TestResourceLimits:
+    def test_continuation_limit_fails_the_connection(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(
+            Role.SERVER,
+            Configuration(max_continuations=0),
+        )
+        begin(client, server)
+        client.send_request(
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+                *[
+                    (
+                        f"x-field-{index}".encode(),
+                        bytes([65 + index % 26]) * 1_000,
+                    )
+                    for index in range(32)
+                ],
+            ],
+            end_stream=True,
+        )
+
+        with pytest.raises(
+            DenialOfServiceError,
+            match="Too many CONTINUATION frames",
+        ):
+            server.receive_data(client.data_to_send())
+        with pytest.raises(ConnectionStateError):
+            server.receive_data(b"")
+
     def test_header_count_limit_fails_the_connection(self):
         client = Connection(Role.CLIENT)
         server = Connection(
