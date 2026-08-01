@@ -15,6 +15,7 @@ from ngh2 import (
     RequestReceived,
     Role,
     __version__,
+    pack_settings_payload,
 )
 
 
@@ -50,6 +51,9 @@ def test_free_threaded_connections_run_independently() -> None:
 
 
 class TestCore:
+    def test_empty_settings_payload_is_empty(self):
+        assert pack_settings_payload({}) == b""
+
     def test_public_exports_are_unique_and_resolvable(self):
         assert len(ngh2.__all__) == len(set(ngh2.__all__))
         assert all(hasattr(ngh2, name) for name in ngh2.__all__)
@@ -127,6 +131,54 @@ class TestCore:
             Connection(Role.CLIENT, configuration)
 
     @pytest.mark.parametrize(
+        "configuration",
+        [
+            Configuration(auto_window_update=cast(bool, 1)),
+            Configuration(
+                stream_reset_rate_limit=cast(tuple[int, int], (1,)),
+            ),
+            Configuration(
+                glitch_rate_limit=cast(tuple[int, int], (1, 2, 3)),
+            ),
+            Configuration(max_continuations=1 << 128),
+            Configuration(max_inbound_header_count=1 << 128),
+        ],
+        ids=[
+            "auto-window-update",
+            "reset-rate-shape",
+            "glitch-rate-shape",
+            "native-size-overflow",
+            "binding-size-overflow",
+        ],
+    )
+    def test_connection_rejects_malformed_configuration(self, configuration):
+        with pytest.raises((TypeError, ValueError)):
+            Connection(Role.CLIENT, configuration)
+
+    @pytest.mark.parametrize(
+        "settings",
+        [
+            {-1: 0},
+            {1 << 16: 0},
+            {1: -1},
+            {1: 1 << 32},
+        ],
+        ids=[
+            "negative-identifier",
+            "large-identifier",
+            "negative-value",
+            "large-value",
+        ],
+    )
+    def test_settings_payload_rejects_out_of_range_entries(self, settings):
+        with pytest.raises(ValueError, match="out of range"):
+            pack_settings_payload(settings)
+
+    def test_settings_payload_rejects_invalid_known_setting_value(self):
+        with pytest.raises(ValueError, match="Invalid argument"):
+            pack_settings_payload({2: 2})
+
+    @pytest.mark.parametrize(
         ("name", "configuration"),
         [
             (
@@ -174,6 +226,10 @@ class TestCore:
         with pytest.raises(NGH2Error):
             connection.receive_data(b"")
 
+        connection.initiate_connection()
+        with pytest.raises(ConnectionStateError, match="already initiated"):
+            connection.initiate_connection()
+
     def test_events_are_read_only_and_support_class_patterns(self):
         event = RequestReceived(1, ((b":method", b"GET"),), True)
 
@@ -191,6 +247,11 @@ class TestCore:
         assert headers == ((b":method", b"GET"),)
         with pytest.raises(AttributeError):
             object.__setattr__(event, "stream_id", 3)
+
+        assert repr(event) == (
+            "RequestReceived(stream_id=1, "
+            "headers=((b':method', b'GET'),), end_stream=True)"
+        )
 
     def test_data_to_send_respects_amount(self):
         connection = Connection(Role.CLIENT)

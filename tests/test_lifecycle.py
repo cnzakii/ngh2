@@ -5,6 +5,7 @@ from ngh2 import (
     Connection,
     ConnectionClosed,
     ConnectionClosingError,
+    ConnectionProtocolError,
     ConnectionStateError,
     DataReceived,
     ErrorCode,
@@ -132,6 +133,24 @@ def test_invalid_regular_header_closes_only_its_stream() -> None:
     assert response.stream_id == sibling_id
 
 
+def test_ignorable_invalid_regular_header_is_rejected() -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(Role.SERVER)
+    handshake(client, server)
+    stream_id = client.send_request(
+        [*REQUEST_HEADERS, (b"host", b"bad\x00host")],
+        end_stream=True,
+    )
+
+    server.receive_data(client.data_to_send())
+    assert not any(isinstance(event, RequestReceived) for event in server.events())
+
+    client.receive_data(server.data_to_send())
+    reset = next(event for event in client.events() if isinstance(event, StreamReset))
+    assert reset.stream_id == stream_id
+    assert reset.error_code == ErrorCode.PROTOCOL_ERROR
+
+
 def test_manual_consumption_emits_connection_and_stream_window_updates() -> None:
     client = Connection(Role.CLIENT)
     server = Connection(
@@ -154,6 +173,42 @@ def test_manual_consumption_emits_connection_and_stream_window_updates() -> None
         (0, consumed),
         (stream_id, consumed),
     }
+
+
+def test_manual_consumption_after_stream_close_updates_connection_window() -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(
+        Role.SERVER,
+        Configuration(auto_window_update=False),
+    )
+    handshake(client, server)
+    stream_id = client.send_request(REQUEST_HEADERS)
+    client.send_data(stream_id, b"x" * 40_000, end_stream=True)
+    server.receive_data(client.data_to_send())
+    consumed = sum(
+        len(event.data) for event in server.events() if isinstance(event, DataReceived)
+    )
+
+    server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
+    client.receive_data(server.data_to_send())
+    assert any(
+        isinstance(event, StreamClosed) and event.stream_id == stream_id
+        for event in server.events()
+    )
+
+    server.acknowledge_received_data(consumed, stream_id)
+    client.receive_data(server.data_to_send())
+
+    updates = [event for event in client.events() if isinstance(event, WindowUpdated)]
+    assert [(event.stream_id, event.increment) for event in updates] == [(0, consumed)]
+
+
+def test_manual_consumption_requires_manual_window_updates() -> None:
+    server = Connection(Role.SERVER)
+    server.initiate_connection()
+
+    with pytest.raises(ConnectionStateError, match="auto_window_update=False"):
+        server.acknowledge_received_data(0, 1)
 
 
 def test_manual_consumption_excludes_padding_already_consumed_by_engine() -> None:
@@ -200,6 +255,23 @@ def test_shutdown_notice_stops_new_requests() -> None:
         client.send_request(REQUEST_HEADERS, end_stream=True)
 
 
+def test_goaway_defaults_to_the_last_processed_peer_stream() -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(Role.SERVER)
+    handshake(client, server)
+    stream_id = client.send_request(REQUEST_HEADERS, end_stream=True)
+    server.receive_data(client.data_to_send())
+    server.events()
+
+    server.send_goaway()
+    client.receive_data(server.data_to_send())
+
+    goaway = next(
+        event for event in client.events() if isinstance(event, GoAwayReceived)
+    )
+    assert goaway.last_stream_id == stream_id
+
+
 def test_goaway_closes_a_queued_request_with_the_local_reason() -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
@@ -228,7 +300,10 @@ def test_terminate_connection_stops_both_session_directions() -> None:
     server.send_response(stream_id, [(b":status", b"200")])
     server.send_data(stream_id, b"queued")
 
-    server.terminate_connection(ErrorCode.INTERNAL_ERROR)
+    server.terminate_connection(
+        ErrorCode.INTERNAL_ERROR,
+        last_stream_id=stream_id,
+    )
     assert server.queued_body_size() == 0
     with pytest.raises(ConnectionStateError):
         server.ping()
@@ -243,7 +318,10 @@ def test_terminate_connection_stops_both_session_directions() -> None:
     assert server.events() == []
     client.receive_data(final_output)
 
-    assert any(isinstance(event, GoAwayReceived) for event in client.events())
+    goaway = next(
+        event for event in client.events() if isinstance(event, GoAwayReceived)
+    )
+    assert goaway.last_stream_id == stream_id
     assert not server.want_read
     assert not server.want_write
     assert not client.can_send_request
@@ -267,6 +345,33 @@ def test_peer_connection_error_finishes_with_goaway_and_closed_event() -> None:
     assert not server.want_write
     with pytest.raises(ConnectionStateError):
         server.receive_data(b"")
+
+
+def test_bad_client_preface_fails_the_connection() -> None:
+    server = Connection(Role.SERVER)
+    server.initiate_connection()
+
+    with pytest.raises(ConnectionProtocolError, match="client magic"):
+        server.receive_data(b"not an HTTP/2 client preface")
+    with pytest.raises(ConnectionStateError, match="no longer usable"):
+        server.initiate_connection()
+
+
+def test_queued_response_is_discarded_after_peer_reset() -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(Role.SERVER)
+    handshake(client, server)
+    stream_id = client.send_request(REQUEST_HEADERS, end_stream=True)
+    server.receive_data(client.data_to_send())
+    server.events()
+    server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
+
+    client.reset_stream(stream_id)
+    server.receive_data(client.data_to_send())
+    server.events()
+
+    assert server.data_to_send() == b""
+    assert server.events() == []
 
 
 def test_connection_closes_only_with_the_last_limited_output_chunk() -> None:

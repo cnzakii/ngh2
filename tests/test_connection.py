@@ -5,6 +5,7 @@ import pytest
 
 from ngh2 import (
     Connection,
+    ConnectionClosingError,
     DataReceived,
     ErrorCode,
     Header,
@@ -29,6 +30,46 @@ def exchange(source: Connection, destination: Connection) -> bytes:
 
 
 class TestConnection:
+    def test_boolean_stream_flags_require_bool(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        exchange(client, server)
+        exchange(server, client)
+
+        with pytest.raises(TypeError, match="end_stream must be a bool"):
+            client.send_request(
+                [
+                    (b":method", b"POST"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"example.test"),
+                    (b":path", b"/"),
+                ],
+                end_stream=cast(bool, 1),
+            )
+
+        stream_id = client.send_request(
+            [
+                (b":method", b"POST"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+            ],
+        )
+        exchange(client, server)
+        server.events()
+        with pytest.raises(TypeError, match="end_stream must be a bool"):
+            client.send_data(stream_id, b"body", end_stream=cast(bool, 1))
+        with pytest.raises(TypeError, match="end_stream must be a bool"):
+            server.send_response(
+                stream_id,
+                [(b":status", b"204")],
+                end_stream=cast(bool, 1),
+            )
+
     def test_outbound_headers_require_a_sequence(self):
         client = Connection(Role.CLIENT)
         client.initiate_connection()
@@ -141,6 +182,7 @@ class TestConnection:
         server_events = server.events()
         assert any(isinstance(item, TrailersReceived) for item in server_events)
 
+        server.send_informational_response(stream_id, [(b":status", b"102")])
         server.send_informational_response(stream_id, [(b":status", b"103")])
         promised_id = server.send_push_promise(
             stream_id,
@@ -159,13 +201,150 @@ class TestConnection:
         exchange(server, client)
 
         client_events = client.events()
-        assert any(
-            isinstance(item, InformationalResponseReceived) for item in client_events
-        )
+        informational = [
+            item
+            for item in client_events
+            if isinstance(item, InformationalResponseReceived)
+        ]
+        assert [event.headers[0] for event in informational] == [
+            (b":status", b"102"),
+            (b":status", b"103"),
+        ]
         pushed = next(
             item for item in client_events if isinstance(item, PushedStreamReceived)
         )
         assert pushed.promised_stream_id == promised_id
+
+    def test_empty_body_can_end_with_trailers_after_data_defers(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        exchange(client, server)
+        exchange(server, client)
+        client.events()
+        server.events()
+
+        stream_id = client.send_request(
+            [
+                (b":method", b"POST"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+            ],
+        )
+        exchange(client, server)
+        server.events()
+
+        client.send_trailers(stream_id, [(b"digest", b"sha-256=:abc:")])
+        exchange(client, server)
+
+        trailers = next(
+            event for event in server.events() if isinstance(event, TrailersReceived)
+        )
+        assert trailers.headers == ((b"digest", b"sha-256=:abc:"),)
+
+    def test_stream_body_rejects_invalid_lifecycle_operations(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        exchange(client, server)
+        exchange(server, client)
+
+        with pytest.raises(StreamProtocolError, match="no open body"):
+            client.send_data(1, b"body")
+        with pytest.raises(StreamProtocolError, match="no open body"):
+            client.send_trailers(1, [])
+
+        stream_id = client.send_request(
+            [
+                (b":method", b"POST"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+            ],
+        )
+        with pytest.raises(TypeError, match="bytes-like"):
+            client.send_data(stream_id, cast(bytes, "body"))
+        with pytest.raises(TypeError, match="each header must be a pair"):
+            client.send_trailers(
+                stream_id,
+                cast(Sequence[Header], [b"not-a-pair"]),
+            )
+        client.send_trailers(stream_id, [])
+        with pytest.raises(StreamProtocolError, match="already ended"):
+            client.send_data(stream_id, b"body")
+        with pytest.raises(StreamProtocolError, match="already ended"):
+            client.send_trailers(stream_id, [])
+
+    def test_response_rejects_a_second_final_response(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        exchange(client, server)
+        exchange(server, client)
+        stream_id = client.send_request(
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+            ],
+            end_stream=True,
+        )
+        exchange(client, server)
+        server.events()
+
+        server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
+        with pytest.raises(StreamProtocolError, match="already pending"):
+            server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
+
+    def test_stream_identifiers_and_headers_are_validated(self):
+        client = Connection(Role.CLIENT)
+        client.initiate_connection()
+
+        with pytest.raises(TypeError, match="stream_id must be an integer"):
+            client.reset_stream(cast(int, 1.5))
+        with pytest.raises(ValueError, match="stream_id is out of range"):
+            client.reset_stream(0)
+        with pytest.raises(TypeError, match="each header must be a pair"):
+            client.send_request(cast(Sequence[Header], [b"not-a-pair"]))
+        with pytest.raises(TypeError):
+            client.send_request(cast(Sequence[Header], [(b"name", 1)]))
+
+    def test_peer_goaway_stops_new_request_submission(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        exchange(client, server)
+        exchange(server, client)
+        stream_id = client.send_request(
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+            ],
+        )
+        exchange(client, server)
+        server.events()
+        server.send_goaway(last_stream_id=stream_id)
+        exchange(server, client)
+        client.events()
+
+        with pytest.raises(ConnectionClosingError):
+            client.send_request([], end_stream=True)
 
     def test_queued_body_size_tracks_flow_control_blocked_body(self):
         client = Connection(Role.CLIENT)
