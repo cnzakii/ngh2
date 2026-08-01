@@ -4,10 +4,20 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-01
+
+### Changed
+
+- Updated the vendored libnghttp2 dependency to v1.70.0.
+
 ### Fixed
 
 - CONTINUATION frame limits no longer count partial frame-header reads, so
   valid fragmented input is accepted independently of transport chunking.
+- Failed push promises for unavailable associated streams no longer consume the
+  next promised stream identifier.
+- PRIORITY_UPDATE payload sizes and server priority urgency values are validated
+  before crossing the native boundary.
 
 ## [0.2.1] - 2026-07-26
 
