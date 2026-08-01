@@ -70,19 +70,7 @@ def test_send_data_takes_ownership_of_mutable_input() -> None:
 
 @pytest.mark.parametrize(
     "fragment_size",
-    [
-        7,
-        pytest.param(
-            1,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "libnghttp2 counts partial mem_recv2 calls while awaiting "
-                    "a CONTINUATION header"
-                ),
-            ),
-        ),
-    ],
+    [7, 1],
     ids=["small-chunks", "one-byte-chunks"],
 )
 def test_fragmented_headers_and_data_preserve_events(fragment_size: int) -> None:

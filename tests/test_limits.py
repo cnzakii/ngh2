@@ -24,6 +24,53 @@ def begin(client: Connection, server: Connection) -> None:
 
 
 class TestResourceLimits:
+    def test_continuation_limit_fails_the_connection(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(
+            Role.SERVER,
+            Configuration(max_continuations=0),
+        )
+        begin(client, server)
+        client.send_request(
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+                *[
+                    (
+                        f"x-field-{index}".encode(),
+                        bytes([65 + index % 26]) * 1_000,
+                    )
+                    for index in range(32)
+                ],
+            ],
+            end_stream=True,
+        )
+
+        with pytest.raises(
+            DenialOfServiceError,
+            match="Too many CONTINUATION frames",
+        ):
+            server.receive_data(client.data_to_send())
+        with pytest.raises(ConnectionStateError):
+            server.receive_data(b"")
+
+    def test_outbound_ack_limit_fails_the_connection(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(
+            Role.SERVER,
+            Configuration(max_outbound_ack=1),
+        )
+        begin(client, server)
+        client.ping(b"first---")
+        client.ping(b"second--")
+
+        with pytest.raises(DenialOfServiceError, match="Flooding was detected"):
+            server.receive_data(client.data_to_send())
+        with pytest.raises(ConnectionStateError):
+            server.receive_data(b"")
+
     def test_header_count_limit_fails_the_connection(self):
         client = Connection(Role.CLIENT)
         server = Connection(
@@ -47,6 +94,29 @@ class TestResourceLimits:
             server.receive_data(b"")
         with pytest.raises(ConnectionStateError):
             server.data_to_send(0)
+
+    def test_header_size_limit_fails_the_connection(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(
+            Role.SERVER,
+            Configuration(max_inbound_header_list_size=160),
+        )
+        begin(client, server)
+        client.send_request(
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+            ],
+            end_stream=True,
+        )
+
+        with pytest.raises(
+            DenialOfServiceError,
+            match="header list exceeds configured size",
+        ):
+            server.receive_data(client.data_to_send())
 
     def test_failed_connection_releases_queued_body_data(self):
         client = Connection(

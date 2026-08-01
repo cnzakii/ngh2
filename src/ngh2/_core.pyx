@@ -301,7 +301,6 @@ cdef class Connection:
         self._require_created()
         if self.role is Role.CLIENT and local_settings is not None:
             raise ValueError("client upgrade does not accept local_settings")
-
         payload = settings_payload
         if payload:
             pointer = <const uint8_t *>PyBytes_AS_STRING(payload)
@@ -642,6 +641,7 @@ cdef class Connection:
         if self.role is not Role.SERVER:
             raise ConnectionProtocolError("a client cannot send push promises")
         stream_id = _stream_id(stream_id)
+        self._require_stream(stream_id)
         count = len(headers)
         native_headers = _make_headers(headers, count)
         try:
@@ -970,6 +970,7 @@ cdef class Connection:
             ConnectionStateError: If the connection is not active.
             ConnectionProtocolError: If called on a server.
             TypeError: If ``field_value`` is not bytes.
+            ValueError: If the payload cannot fit in an HTTP/2 frame.
         """
         cdef bytes value
         cdef int result
@@ -983,6 +984,8 @@ cdef class Connection:
         if _nghttp2.nghttp2_session_get_remote_settings(self._session, 9) == 0:
             return False
         value = field_value
+        if 4 + len(value) > 0xFFFFFF:
+            raise ValueError("PRIORITY_UPDATE payload exceeds HTTP/2 frame limit")
         result = _nghttp2.nghttp2_submit_priority_update(
             self._session, _nghttp2.NGHTTP2_FLAG_NONE, stream_id,
             <const uint8_t *>PyBytes_AS_STRING(value), len(value),
@@ -1007,8 +1010,11 @@ cdef class Connection:
             ConnectionStateError: If the connection is not active.
             ConnectionProtocolError: If called on a client.
             StreamUnavailableError: If the stream does not exist.
+            TypeError: If ``priority`` is not a ``Priority``.
+            ValueError: If urgency is negative or does not fit 32 bits.
         """
         cdef _nghttp2.nghttp2_extpri native_priority
+        cdef uint32_t urgency
         cdef int result
 
         self._require_active()
@@ -1019,11 +1025,12 @@ cdef class Connection:
         stream_id = _stream_id(stream_id)
         if not isinstance(priority, Priority):
             raise TypeError("priority must be a Priority")
+        urgency = _uint32(priority.urgency, "priority.urgency")
         if not self._local_extensible_priority:
             return False
 
         self._require_stream(stream_id)
-        native_priority.urgency = priority.urgency
+        native_priority.urgency = urgency
         native_priority.inc = priority.incremental
         result = _nghttp2.nghttp2_session_change_extpri_stream_priority(
             self._session, stream_id, &native_priority, ignore_client_signal,
@@ -1047,7 +1054,6 @@ cdef class Connection:
             StreamUnavailableError: If the stream does not exist.
         """
         cdef _nghttp2.nghttp2_extpri native_priority
-        cdef int result
 
         self._require_active()
         if self.role is not Role.SERVER:
@@ -1059,11 +1065,9 @@ cdef class Connection:
             return None
 
         self._require_stream(stream_id)
-        result = _nghttp2.nghttp2_session_get_extpri_stream_priority(
+        _nghttp2.nghttp2_session_get_extpri_stream_priority(
             self._session, &native_priority, stream_id,
         )
-        if result < 0:
-            self._raise_native_error(result)
         return Priority(native_priority.urgency, bool(native_priority.inc))
 
     def send_alt_svc(self, field_value, *, stream_id=0, origin=b""):
@@ -1543,10 +1547,6 @@ cdef void _apply_configuration(_nghttp2.nghttp2_option *option, object config):
     _nghttp2.nghttp2_option_set_max_outbound_ack(option, max_outbound_ack)
     _nghttp2.nghttp2_option_set_max_settings(option, max_settings)
     _nghttp2.nghttp2_option_set_stream_reset_rate_limit(option, reset_burst, reset_rate)
-    # libnghttp2 counts partial reads while awaiting a CONTINUATION frame
-    # header. Keep the native limit mapped here while awaiting the upstream
-    # fix and a new vendored revision:
-    # https://github.com/nghttp2/nghttp2/issues/2817
     _nghttp2.nghttp2_option_set_max_continuations(option, max_continuations)
     _nghttp2.nghttp2_option_set_glitch_rate_limit(option, glitch_burst, glitch_rate)
     _nghttp2.nghttp2_option_set_builtin_recv_extension_type(
@@ -1790,10 +1790,7 @@ cdef object _nghttp2_error(int error_code):
         _nghttp2.NGHTTP2_ERR_SESSION_CLOSING,
     ):
         return ConnectionClosingError(message)
-    if error_code in (
-        _nghttp2.NGHTTP2_ERR_DATA_EXIST,
-        _nghttp2.NGHTTP2_ERR_DEFERRED_DATA_EXIST,
-    ):
+    if error_code == _nghttp2.NGHTTP2_ERR_DATA_EXIST:
         return StreamProtocolError(message)
     if error_code == _nghttp2.NGHTTP2_ERR_BAD_CLIENT_MAGIC:
         return ConnectionProtocolError(message)
@@ -1818,7 +1815,6 @@ cdef object _frame_not_sent_error(int error_code):
     if error_code in (
         _nghttp2.NGHTTP2_ERR_PROTO,
         _nghttp2.NGHTTP2_ERR_INVALID_STREAM_STATE,
-        _nghttp2.NGHTTP2_ERR_INVALID_HEADER_BLOCK,
     ):
         return StreamProtocolError(_error_message(error_code))
     error = _nghttp2_error(error_code)
