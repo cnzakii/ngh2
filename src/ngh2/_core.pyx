@@ -1543,10 +1543,6 @@ cdef void _apply_configuration(_nghttp2.nghttp2_option *option, object config):
     _nghttp2.nghttp2_option_set_max_outbound_ack(option, max_outbound_ack)
     _nghttp2.nghttp2_option_set_max_settings(option, max_settings)
     _nghttp2.nghttp2_option_set_stream_reset_rate_limit(option, reset_burst, reset_rate)
-    # libnghttp2 counts partial reads while awaiting a CONTINUATION frame
-    # header. Keep the native limit mapped here while awaiting the upstream
-    # fix and a new vendored revision:
-    # https://github.com/nghttp2/nghttp2/issues/2817
     _nghttp2.nghttp2_option_set_max_continuations(option, max_continuations)
     _nghttp2.nghttp2_option_set_glitch_rate_limit(option, glitch_burst, glitch_rate)
     _nghttp2.nghttp2_option_set_builtin_recv_extension_type(

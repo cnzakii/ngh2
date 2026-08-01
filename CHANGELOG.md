@@ -4,6 +4,11 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+### Fixed
+
+- CONTINUATION frame limits no longer count partial frame-header reads, so
+  valid fragmented input is accepted independently of transport chunking.
+
 ## [0.2.1] - 2026-07-26
 
 This maintenance release changes distribution metadata, documentation hosting,
