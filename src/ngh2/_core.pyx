@@ -301,8 +301,6 @@ cdef class Connection:
         self._require_created()
         if self.role is Role.CLIENT and local_settings is not None:
             raise ValueError("client upgrade does not accept local_settings")
-        head_request = _boolean(head_request, "head_request")
-
         payload = settings_payload
         if payload:
             pointer = <const uint8_t *>PyBytes_AS_STRING(payload)
@@ -472,7 +470,6 @@ cdef class Connection:
             raise ConnectionClosingError(
                 "the connection cannot create another request stream",
             )
-        end_stream = _boolean(end_stream, "end_stream")
         count = len(headers)
         native_headers = _make_headers(headers, count)
         if not end_stream:
@@ -522,7 +519,6 @@ cdef class Connection:
         self._require_stream(stream_id)
         if stream_id in self._responses:
             raise StreamProtocolError("a response is already pending")
-        end_stream = _boolean(end_stream, "end_stream")
         count = len(headers)
         native_headers = _make_headers(headers, count)
         if not end_stream:
@@ -687,7 +683,6 @@ cdef class Connection:
             raise StreamProtocolError("stream body is already ended")
         if not isinstance(data, (bytes, bytearray, memoryview)):
             raise TypeError("data must be a bytes-like object")
-        end_stream = _boolean(end_stream, "end_stream")
         chunk = data if isinstance(data, bytes) else bytes(data)
         if chunk:
             body.chunks.append(chunk)
@@ -1015,13 +1010,11 @@ cdef class Connection:
             ConnectionStateError: If the connection is not active.
             ConnectionProtocolError: If called on a client.
             StreamUnavailableError: If the stream does not exist.
-            TypeError: If priority fields or ``ignore_client_signal`` have
-                invalid types.
+            TypeError: If ``priority`` is not a ``Priority``.
             ValueError: If urgency is negative or does not fit 32 bits.
         """
         cdef _nghttp2.nghttp2_extpri native_priority
         cdef uint32_t urgency
-        cdef bint incremental
         cdef int result
 
         self._require_active()
@@ -1033,17 +1026,12 @@ cdef class Connection:
         if not isinstance(priority, Priority):
             raise TypeError("priority must be a Priority")
         urgency = _uint32(priority.urgency, "priority.urgency")
-        incremental = _boolean(priority.incremental, "priority.incremental")
-        ignore_client_signal = _boolean(
-            ignore_client_signal,
-            "ignore_client_signal",
-        )
         if not self._local_extensible_priority:
             return False
 
         self._require_stream(stream_id)
         native_priority.urgency = urgency
-        native_priority.inc = incremental
+        native_priority.inc = priority.incremental
         result = _nghttp2.nghttp2_session_change_extpri_stream_priority(
             self._session, stream_id, &native_priority, ignore_client_signal,
         )
@@ -1507,7 +1495,8 @@ cdef void _apply_configuration(_nghttp2.nghttp2_option *option, object config):
     cdef uint64_t glitch_burst
     cdef uint64_t glitch_rate
 
-    _boolean(config.auto_window_update, "auto_window_update")
+    if not isinstance(config.auto_window_update, bool):
+        raise TypeError("auto_window_update must be a bool")
     try:
         reset_burst_value, reset_rate_value = config.stream_reset_rate_limit
     except (TypeError, ValueError):
@@ -1677,13 +1666,6 @@ cdef int _stream_id(object value) except -1:
         raise TypeError("stream_id must be an integer") from None
     if value <= 0 or value > 0x7FFFFFFF:
         raise ValueError("stream_id is out of range")
-    return value
-
-
-cdef bint _boolean(object value, str name) except *:
-    """Validate and return a Python boolean."""
-    if not isinstance(value, bool):
-        raise TypeError(f"{name} must be a bool")
     return value
 
 

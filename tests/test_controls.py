@@ -53,14 +53,6 @@ class TestControlFrames:
         with pytest.raises(TypeError, match="settings must be a mapping"):
             pack_settings_payload(cast(dict[int, int], []))
 
-    def test_upgrade_requires_boolean_head_request(self):
-        client = Connection(Role.CLIENT)
-
-        with pytest.raises(TypeError, match="head_request must be a bool"):
-            client.initiate_upgrade(b"", head_request=cast(bool, 1))
-
-        client.initiate_upgrade(b"", head_request=True)
-
     def test_wire_integer_arguments_reject_fractional_values(self):
         with pytest.raises(TypeError):
             pack_settings_payload({Setting.MAX_FRAME_SIZE: cast(int, 1.5)})
@@ -519,17 +511,6 @@ class TestControlFrames:
         assert server.get_stream_priority(stream_id) == Priority(7)
         with pytest.raises(ValueError, match=r"priority\.urgency is out of range"):
             server.set_stream_priority(stream_id, Priority(-1))
-        with pytest.raises(TypeError, match=r"priority\.incremental must be a bool"):
-            server.set_stream_priority(
-                stream_id,
-                Priority(incremental=cast(bool, 1)),
-            )
-        with pytest.raises(TypeError, match="ignore_client_signal must be a bool"):
-            server.set_stream_priority(
-                stream_id,
-                Priority(),
-                ignore_client_signal=cast(bool, 1),
-            )
 
     def test_extensible_priority_before_settings_acknowledgement(self):
         client = Connection(Role.CLIENT)

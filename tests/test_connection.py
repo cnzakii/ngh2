@@ -30,46 +30,6 @@ def exchange(source: Connection, destination: Connection) -> bytes:
 
 
 class TestConnection:
-    def test_boolean_stream_flags_require_bool(self):
-        client = Connection(Role.CLIENT)
-        server = Connection(Role.SERVER)
-        client.initiate_connection()
-        server.initiate_connection()
-        exchange(client, server)
-        exchange(server, client)
-        exchange(client, server)
-        exchange(server, client)
-
-        with pytest.raises(TypeError, match="end_stream must be a bool"):
-            client.send_request(
-                [
-                    (b":method", b"POST"),
-                    (b":scheme", b"https"),
-                    (b":authority", b"example.test"),
-                    (b":path", b"/"),
-                ],
-                end_stream=cast(bool, 1),
-            )
-
-        stream_id = client.send_request(
-            [
-                (b":method", b"POST"),
-                (b":scheme", b"https"),
-                (b":authority", b"example.test"),
-                (b":path", b"/"),
-            ],
-        )
-        exchange(client, server)
-        server.events()
-        with pytest.raises(TypeError, match="end_stream must be a bool"):
-            client.send_data(stream_id, b"body", end_stream=cast(bool, 1))
-        with pytest.raises(TypeError, match="end_stream must be a bool"):
-            server.send_response(
-                stream_id,
-                [(b":status", b"204")],
-                end_stream=cast(bool, 1),
-            )
-
     def test_outbound_headers_require_a_sequence(self):
         client = Connection(Role.CLIENT)
         client.initiate_connection()
