@@ -204,7 +204,7 @@ wheels = [
 
 [[package]]
 name = "cython-lint"
-version = "0.21.0"
+version = "0.21.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cython" },
@@ -212,9 +212,9 @@ dependencies = [
     { name = "tokenize-rt" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3e/fb/6f9faa66a488110e555667a4eb803c2b34abd2039d9974c9a971b22de413/cython_lint-0.21.0.tar.gz", hash = "sha256:d4c4e58fd3770fa7fb6db9084735be1d1ba2b9c01618f939ccb568033964beba", size = 29055, upload-time = "2026-06-21T11:36:44.421Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/32/1a/29aa1e57639bb54a45803e85fbb7f8603e2f490dfb4568cdebf04a70929e/cython_lint-0.21.1.tar.gz", hash = "sha256:bfacc75ce47b6631fd3c7a570b6918cea37e679c71407c9e1249e3a949f9100f", size = 30089, upload-time = "2026-08-26T13:18:51.462Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/09/fa/94f7b38bdc810c31f0b817acecdb9eba1160105794a2fd9c563b6b22c190/cython_lint-0.21.0-py3-none-any.whl", hash = "sha256:49796d815fd1ca93b9dff15de30c502a99164519c6a36901584a7e41ac8132ac", size = 14263, upload-time = "2026-06-21T11:36:43.277Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/a8/9b45ca296632584a450ae2f7d37ec9d1268846451df6e5587905dd8d02a8/cython_lint-0.21.1-py3-none-any.whl", hash = "sha256:8a161e6f81e6477d74ce3fa63c564ce4c63104e001ababb98ad6b053cd1d5152", size = 15188, upload-time = "2026-08-26T13:18:50.097Z" },
 ]
 
 [[package]]
