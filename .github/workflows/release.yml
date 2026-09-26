@@ -41,9 +41,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: manylinux-x86_64
+          - platform: linux-x86_64
             os: ubuntu-latest
-          - platform: manylinux-aarch64
+          - platform: linux-aarch64
             os: ubuntu-24.04-arm
           - platform: macos-x86_64
             os: macos-15-intel
