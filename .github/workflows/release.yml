@@ -14,7 +14,7 @@ concurrency:
 jobs:
   validate:
     name: Validate release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -42,15 +42,15 @@ jobs:
       matrix:
         include:
           - platform: linux-x86_64
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - platform: linux-aarch64
             os: ubuntu-24.04-arm
           - platform: macos-x86_64
-            os: macos-15-intel
+            os: macos-26-intel
           - platform: macos-aarch64
-            os: macos-14
+            os: macos-26
           - platform: windows-x86_64
-            os: windows-latest
+            os: windows-2025
           - platform: windows-aarch64
             os: windows-11-arm
     steps:
@@ -68,7 +68,7 @@ jobs:
   sdist:
     name: Source distribution
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -93,7 +93,7 @@ jobs:
   publish-pypi:
     name: Publish to PyPI
     needs: [wheels, sdist]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
       name: release
@@ -114,7 +114,7 @@ jobs:
   github-release:
     name: Publish GitHub release
     needs: publish-pypi
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write
