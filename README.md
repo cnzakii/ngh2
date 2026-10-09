@@ -13,7 +13,7 @@
   <a href="https://codecov.io/gh/cnzakii/ngh2"><img src="https://codecov.io/gh/cnzakii/ngh2/graph/badge.svg" alt="codecov"></a>
   <a href="https://pypi.org/project/ngh2/"><img src="https://img.shields.io/pypi/v/ngh2.svg" alt="PyPI"></a>
   <a href="https://pypi.org/project/ngh2/"><img src="https://img.shields.io/pypi/pyversions/ngh2.svg" alt="Python versions"></a>
-  <a href="https://github.com/cnzakii/ngh2/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/free--threaded-3.14t-3776AB?logo=python&amp;logoColor=white" alt="Free-threaded CPython 3.14t"></a>
+  <a href="https://github.com/cnzakii/ngh2/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/free--threaded-3.14t%20%7C%203.15t-3776AB?logo=python&amp;logoColor=white" alt="Free-threaded CPython 3.14t and 3.15t"></a>
   <a href="https://github.com/cnzakii/ngh2/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
@@ -45,7 +45,8 @@ python -m pip install ngh2
 ```
 
 Published wheels include the native HTTP/2 engine; no separate system
-installation is required.
+installation is required. Linux wheels cover both glibc (manylinux) and musl
+(musllinux, such as Alpine) distributions.
 
 The [first-exchange tutorial](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/)
 runs a complete in-memory client/server exchange and explains its connection
@@ -82,8 +83,8 @@ Header names and values are bytes. Drive each `Connection` from one thread or
 task at a time and serialize operations in protocol order. Independent
 connections can run concurrently.
 
-ngh2 supports GIL-enabled CPython 3.10 through 3.14 and free-threaded CPython
-3.14t.
+ngh2 supports GIL-enabled CPython 3.10 through 3.15 and free-threaded CPython
+3.14t and 3.15t.
 
 ## Performance
 

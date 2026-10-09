@@ -4,6 +4,13 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- Support for CPython 3.15 and free-threaded CPython 3.15t, with wheels for
+  both.
+- Wheels for musl-based Linux distributions such as Alpine (`musllinux_1_2`
+  on x86_64 and aarch64), which previously built from the source distribution.
+
 ## [0.2.2] - 2026-08-01
 
 ### Changed

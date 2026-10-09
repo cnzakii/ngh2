@@ -20,7 +20,7 @@ env:
 jobs:
   changes:
     name: Classify changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       code: ${{ steps.paths.outputs.code }}
@@ -51,7 +51,7 @@ jobs:
     name: Lint and static analysis
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -70,7 +70,7 @@ jobs:
     name: Documentation
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -81,7 +81,7 @@ jobs:
       - run: uv run --locked --no-dev --group docs zensical build --strict
 
   python:
-    name: Python ${{ matrix.python-version }}${{ matrix.preview && ' preview' || '' }} on ${{ matrix.os }}
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
@@ -89,24 +89,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
+        os: [ubuntu-24.04]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15", "3.15t"]
         include:
-          # Pre-release interpreters exercise forward compatibility but are
-          # not wheel targets until CPython reaches the release candidate phase.
-          - os: ubuntu-latest
-            python-version: "3.15"
-            preview: true
-          - os: ubuntu-latest
-            python-version: "3.15t"
-            preview: true
           - os: ubuntu-24.04-arm
             python-version: "3.12"
-          - os: macos-15-intel
+          - os: macos-26-intel
             python-version: "3.12"
-          - os: macos-14
+          - os: macos-26
             python-version: "3.12"
-          - os: windows-latest
+          - os: windows-2025
             python-version: "3.12"
           - os: windows-11-arm
             python-version: "3.12"
@@ -121,11 +113,43 @@ jobs:
       - run: uv sync --locked --no-dev --group test
       - run: uv run --locked --no-dev --group test pytest -m "not h2spec"
 
+  python-musl:
+    name: Python 3.12 on musllinux ${{ matrix.arch }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-24.04
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          submodules: true
+      # The runner cannot execute JavaScript actions inside Alpine containers
+      # on arm64, so the tests run through docker run instead of a job
+      # container.
+      - name: Test in Alpine
+        run: |
+          docker run --rm --volume "$PWD:/work" --workdir /work \
+            --env UV_PYTHON_DOWNLOADS=never \
+            ghcr.io/astral-sh/uv:python3.12-alpine sh -euxc '
+              apk add --no-cache build-base cmake
+              uv sync --locked --no-dev --group test
+              uv run --locked --no-dev --group test pytest -m "not h2spec"
+            '
+
   h2spec:
     name: h2spec generic conformance
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -150,7 +174,7 @@ jobs:
     name: Source distribution
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -175,7 +199,7 @@ jobs:
     name: Coverage
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Codecov uses OIDC, so no long-lived upload token is stored.
     permissions:
@@ -217,10 +241,11 @@ jobs:
       - lint
       - docs
       - python
+      - python-musl
       - h2spec
       - package
       - coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require successful affected checks
