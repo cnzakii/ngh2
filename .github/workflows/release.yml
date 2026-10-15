@@ -1,6 +1,11 @@
 name: Release
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "pyproject.toml"
+      - "src/ngh2/_version.py"
   push:
     tags: ["v*"]
 
@@ -9,7 +14,7 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
@@ -22,6 +27,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Verify tag and package version
+        if: github.event_name == 'push'
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -92,6 +98,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
+    if: github.event_name == 'push'
     needs: [wheels, sdist]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -113,6 +120,7 @@ jobs:
 
   github-release:
     name: Publish GitHub release
+    if: github.event_name == 'push'
     needs: publish-pypi
     runs-on: ubuntu-24.04
     timeout-minutes: 5
