@@ -21,40 +21,40 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 <line class="grid" x1="890.0" y1="108" x2="890.0" y2="492"/>
 <text class="secondary" x="890.0" y="102" text-anchor="middle" font-size="10">32×</text>
 <text class="primary" x="40" y="139" font-size="13" font-weight="500">Small request/204 round trip</text>
-<text class="secondary" x="40" y="161" font-size="11">2.19 µs vs 58.02 µs</text>
+<text class="secondary" x="40" y="161" font-size="11">2.19 µs vs 58.13 µs</text>
 <text class="secondary" x="308" y="136" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="124" width="437.9" height="15" rx="7.5"/>
-<text class="primary" x="807.9" y="136" font-size="11" font-weight="500">26.4×</text>
+<rect class="candidate" x="360" y="124" width="439.2" height="15" rx="7.5"/>
+<text class="primary" x="809.2" y="136" font-size="11" font-weight="500">26.5×</text>
 <text class="secondary" x="308" y="159" text-anchor="end" font-size="10">h2 4.4.1</text>
 <rect class="reference" x="360" y="147" width="16.6" height="10" rx="5"/>
 <text class="primary" x="40" y="215" font-size="13" font-weight="500">Header block · 32 fields</text>
-<text class="secondary" x="40" y="237" font-size="11">4.63 µs vs 130.19 µs</text>
+<text class="secondary" x="40" y="237" font-size="11">4.67 µs vs 130.51 µs</text>
 <text class="secondary" x="308" y="212" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="200" width="465.6" height="15" rx="7.5"/>
-<text class="primary" x="835.6" y="212" font-size="11" font-weight="500">28.1×</text>
+<rect class="candidate" x="360" y="200" width="463.3" height="15" rx="7.5"/>
+<text class="primary" x="833.3" y="212" font-size="11" font-weight="500">28.0×</text>
 <text class="secondary" x="308" y="235" text-anchor="end" font-size="10">h2 4.4.1</text>
 <rect class="reference" x="360" y="223" width="16.6" height="10" rx="5"/>
 <text class="primary" x="40" y="291" font-size="13" font-weight="500">Fragmented request · 5 B</text>
-<text class="secondary" x="40" y="313" font-size="11">2.55 µs vs 61.96 µs</text>
+<text class="secondary" x="40" y="313" font-size="11">2.58 µs vs 61.92 µs</text>
 <text class="secondary" x="308" y="288" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="276" width="401.8" height="15" rx="7.5"/>
-<text class="primary" x="771.8" y="288" font-size="11" font-weight="500">24.3×</text>
+<rect class="candidate" x="360" y="276" width="397.5" height="15" rx="7.5"/>
+<text class="primary" x="767.5" y="288" font-size="11" font-weight="500">24.0×</text>
 <text class="secondary" x="308" y="311" text-anchor="end" font-size="10">h2 4.4.1</text>
 <rect class="reference" x="360" y="299" width="16.6" height="10" rx="5"/>
 <text class="primary" x="40" y="367" font-size="13" font-weight="500">Request body · 32 KiB</text>
-<text class="secondary" x="40" y="389" font-size="11">6.32 µs vs 117.10 µs</text>
+<text class="secondary" x="40" y="389" font-size="11">6.27 µs vs 116.71 µs</text>
 <text class="secondary" x="308" y="364" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="352" width="306.6" height="15" rx="7.5"/>
-<text class="primary" x="676.6" y="364" font-size="11" font-weight="500">18.5×</text>
+<rect class="candidate" x="360" y="352" width="308.5" height="15" rx="7.5"/>
+<text class="primary" x="678.5" y="364" font-size="11" font-weight="500">18.6×</text>
 <text class="secondary" x="308" y="387" text-anchor="end" font-size="10">h2 4.4.1</text>
 <rect class="reference" x="360" y="375" width="16.6" height="10" rx="5"/>
 <text class="primary" x="40" y="443" font-size="13" font-weight="500">Multiplexed batch · 100 streams</text>
-<text class="secondary" x="40" y="465" font-size="11">1.53 µs vs 47.33 µs</text>
+<text class="secondary" x="40" y="465" font-size="11">1.52 µs vs 47.43 µs</text>
 <text class="secondary" x="308" y="440" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="428" width="512.9" height="15" rx="7.5"/>
-<text class="primary" x="882.9" y="440" font-size="11" font-weight="500">31.0×</text>
+<rect class="candidate" x="360" y="428" width="515.9" height="15" rx="7.5"/>
+<text class="primary" x="885.9" y="440" font-size="11" font-weight="500">31.1×</text>
 <text class="secondary" x="308" y="463" text-anchor="end" font-size="10">h2 4.4.1</text>
 <rect class="reference" x="360" y="451" width="16.6" height="10" rx="5"/>
-<text class="secondary" x="40" y="518" font-size="10">ngh2 0.2.2 (531598d) · h2 4.4.1 · CPython 3.12.13 (64-bit)</text>
+<text class="secondary" x="40" y="518" font-size="10">ngh2 0.3.0 (4a04d5f) · h2 4.4.1 · CPython 3.12.13 (64-bit)</text>
 <text class="secondary" x="40" y="535" font-size="10">Apple M4 · macOS-27.0.1-arm64-arm-64bit · 2026-10-20</text>
 </svg>

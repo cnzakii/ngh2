@@ -17,24 +17,26 @@
   <a href="https://github.com/cnzakii/ngh2/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-Use a `Connection` to submit requests, responses, body data, and HTTP/2
-controls, feed it bytes from any transport, then handle the resulting events.
-ngh2 takes care of framing, HPACK, flow control, stream state, scheduling, and
-protocol validation.
+Build HTTP/2 clients, servers, proxies, and protocol tools with control over
+your transport and runtime. Feed incoming bytes to a `Connection`, handle
+protocol events, and write the outgoing bytes it produces.
+
+Protocol processing is synchronous. Your application decides when to read,
+write, and schedule work; ngh2 manages HTTP/2 connection and stream state.
 
 > ngh2 is currently alpha software. Its public API may change before the first
 > stable release.
 
 ## Why ngh2
 
-- **Messages in, events out.** Call methods for requests, responses, bodies,
-  trailers, and connection controls while ngh2 handles HTTP/2 mechanics.
+- **Message and event API.** Submit requests, responses, bodies, and trailers;
+  handle connection and stream events as Python objects.
 - **Measured protocol speed.** The checked public-API workloads deliver roughly
-  18.5–31× the throughput of [h2](https://h2.readthedocs.io/); see the
+  20–30× the throughput of [h2](https://h2.readthedocs.io/); see the
   [measurements](#performance).
-- **A proven foundation.**
-  [libnghttp2](https://nghttp2.org/documentation/) provides the actively
-  maintained HTTP/2 protocol engine underneath ngh2.
+- **Native protocol engine.**
+  [libnghttp2](https://nghttp2.org/documentation/) handles framing, HPACK,
+  flow control, scheduling, and protocol validation.
 
 ## Get started
 
@@ -44,50 +46,44 @@ Install ngh2:
 python -m pip install ngh2
 ```
 
-Published wheels include the native HTTP/2 engine; no separate system
-installation is required. Linux wheels cover both glibc (manylinux) and musl
-(musllinux, such as Alpine) distributions.
+Supported interpreters are CPython 3.10 through 3.15, including free-threaded
+CPython 3.14t and 3.15t.
 
-The [first-exchange tutorial](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/)
-runs a complete in-memory client/server exchange and explains its connection
-setup, request, response, and events.
+Wheels bundle libnghttp2 for Linux, macOS, and Windows. Linux wheels support
+both glibc (manylinux) and musl (musllinux, including Alpine).
+
+Start with the
+[first-exchange tutorial](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/).
+It runs a complete client/server exchange in memory and explains how to
+initialize connections, send messages, and handle events. The
+[example source](https://github.com/cnzakii/ngh2/blob/main/examples/python/first_round_trip.py)
+is also available to run directly.
+
+## How it fits
+
+Each `Connection` manages one HTTP/2 connection and its multiplexed streams.
+It supports client and server roles, request and response bodies, informational
+responses, trailers, flow control, stream cancellation, and connection shutdown.
+
+Your application owns sockets, TLS and ALPN, transport buffering, connection
+pooling, routing, retries, and timeouts. The same protocol API can be used with
+blocking or asynchronous transports.
+
+Drive each `Connection` from one thread or task at a time. Independent
+connections can run concurrently.
 
 ## Documentation
 
-- [Learn ngh2](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/)
-  through one connected tutorial sequence.
-- [Integrate asyncio transports](https://ngh2.readthedocs.io/en/stable/guides/transport/)
-  for clients and servers, then add flow control, recovery, and shutdown.
-- [Use advanced HTTP/2](https://ngh2.readthedocs.io/en/stable/advanced/)
-  features only when your application needs them.
-- [Look up the Python API](https://ngh2.readthedocs.io/en/stable/reference/) for
-  exact methods, return values, event fields, and exceptions.
-- [Browse the runnable examples](https://github.com/cnzakii/ngh2/tree/main/examples)
-  without the surrounding tutorial prose.
-
-## Scope
-
-ngh2 maintains one HTTP/2 connection. It does not open sockets, negotiate TLS
-or ALPN, choose a concurrency model, pool connections, route requests, retry
-failed work, or implement application timeouts.
-
-The public API covers:
-
-- client and server roles, including h2c upgrade;
-- requests, informational and final responses, DATA, trailers, and server push;
-- SETTINGS, PING, GOAWAY, RST_STREAM, and automatic or manual receive flow
-  control; and
-- RFC 9218 priority, extended CONNECT, ALTSVC, ORIGIN, and PRIORITY_UPDATE.
-
-Header names and values are bytes. Header inputs accept iterables of field
-pairs, including lists, tuples, generators, and `headers.items()`. Field order
-and duplicates are preserved, and submitted fields are snapshotted.
-
-Drive each `Connection` from one thread or task at a time and serialize
-operations in protocol order. Independent connections can run concurrently.
-
-ngh2 supports GIL-enabled CPython 3.10 through 3.15 and free-threaded CPython
-3.14t and 3.15t.
+- [Tutorials](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/):
+  exchange messages, multiplex streams, and manage message lifecycles.
+- [Integration guides](https://ngh2.readthedocs.io/en/stable/guides/transport/):
+  connect asyncio transports, manage flow control, and handle shutdown.
+- [Advanced HTTP/2](https://ngh2.readthedocs.io/en/stable/advanced/):
+  configure settings, priority, server push, and protocol extensions.
+- [Python API](https://ngh2.readthedocs.io/en/stable/reference/):
+  methods, accepted inputs, event fields, and exceptions.
+- [Runnable examples](https://github.com/cnzakii/ngh2/tree/main/examples):
+  complete programs used throughout the documentation.
 
 ## Performance
 
@@ -98,13 +94,13 @@ state are reused across exchanges; the initial handshake is outside the timer.
 
 | Scenario | ngh2 (µs/exchange) | h2 4.4.1 (µs/exchange) | Relative throughput |
 | --- | ---: | ---: | ---: |
-| Small request/204 round trip | 2.19 | 58.02 | 26.4× |
-| Header block · 32 fields | 4.63 | 130.19 | 28.1× |
-| Fragmented request · 5 B | 2.55 | 61.96 | 24.3× |
-| Request body · 32 KiB | 6.32 | 117.10 | 18.5× |
-| Multiplexed batch · 100 streams | 1.53 | 47.33 | 31.0× |
+| Small request/204 round trip | 2.19 | 58.13 | 26.5× |
+| Header block · 32 fields | 4.67 | 130.51 | 28.0× |
+| Fragmented request · 5 B | 2.58 | 61.92 | 24.0× |
+| Request body · 32 KiB | 6.27 | 116.71 | 18.6× |
+| Multiplexed batch · 100 streams | 1.52 | 47.43 | 31.1× |
 
-_Environment: ngh2 0.2.2 (531598d) · h2 4.4.1 · CPython 3.12.13 (64-bit) · Apple M4 · macOS-27.0.1-arm64-arm-64bit · 2026-10-20_
+_Environment: ngh2 0.3.0 (4a04d5f) · h2 4.4.1 · CPython 3.12.13 (64-bit) · Apple M4 · macOS-27.0.1-arm64-arm-64bit · 2026-10-20_
 
 These are protocol-layer measurements, not end-to-end client or server
 benchmarks. They exclude sockets, TLS, event-loop scheduling, and application
