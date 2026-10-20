@@ -29,8 +29,8 @@ protocol validation.
 
 - **Messages in, events out.** Call methods for requests, responses, bodies,
   trailers, and connection controls while ngh2 handles HTTP/2 mechanics.
-- **Measured protocol speed.** The checked public-API workloads run roughly
-  20× faster than [h2](https://h2.readthedocs.io/); see the
+- **Measured protocol speed.** The checked public-API workloads deliver roughly
+  18.5–31× the throughput of [h2](https://h2.readthedocs.io/); see the
   [measurements](#performance).
 - **A proven foundation.**
   [libnghttp2](https://nghttp2.org/documentation/) provides the actively
@@ -79,9 +79,12 @@ The public API covers:
   control; and
 - RFC 9218 priority, extended CONNECT, ALTSVC, ORIGIN, and PRIORITY_UPDATE.
 
-Header names and values are bytes. Drive each `Connection` from one thread or
-task at a time and serialize operations in protocol order. Independent
-connections can run concurrently.
+Header names and values are bytes. Header inputs accept iterables of field
+pairs, including lists, tuples, generators, and `headers.items()`. Field order
+and duplicates are preserved, and submitted fields are snapshotted.
+
+Drive each `Connection` from one thread or task at a time and serialize
+operations in protocol order. Independent connections can run concurrently.
 
 ngh2 supports GIL-enabled CPython 3.10 through 3.15 and free-threaded CPython
 3.14t and 3.15t.
@@ -89,23 +92,27 @@ ngh2 supports GIL-enabled CPython 3.10 through 3.15 and free-threaded CPython
 ## Performance
 
 The checked `pyperf` run compares complete exchanges through the public APIs of
-ngh2 and h2 4.4.0. It includes stream state transitions, HPACK, flow-control
-accounting, event construction, and frame serialization.
+ngh2 and hyper-h2. It includes stream state transitions, HPACK, flow-control
+accounting, event construction, and frame serialization. Connections and HPACK
+state are reused across exchanges; the initial handshake is outside the timer.
 
-| Scenario | ngh2 (µs/exchange) | h2 4.4.0 (µs/exchange) | Relative throughput |
+| Scenario | ngh2 (µs/exchange) | h2 4.4.1 (µs/exchange) | Relative throughput |
 | --- | ---: | ---: | ---: |
-| Small request/204 round trip | 2.56 | 63.20 | 24.7× |
-| Header block · 32 fields | 5.76 | 138.43 | 24.0× |
-| Fragmented request · 5 B | 2.91 | 65.77 | 22.6× |
-| Request body · 32 KiB | 7.63 | 125.26 | 16.4× |
-| Multiplexed batch · 100 streams | 1.80 | 49.88 | 27.7× |
+| Small request/204 round trip | 2.19 | 58.02 | 26.4× |
+| Header block · 32 fields | 4.63 | 130.19 | 28.1× |
+| Fragmented request · 5 B | 2.55 | 61.96 | 24.3× |
+| Request body · 32 KiB | 6.32 | 117.10 | 18.5× |
+| Multiplexed batch · 100 streams | 1.53 | 47.33 | 31.0× |
+
+_Environment: ngh2 0.2.2 (531598d) · h2 4.4.1 · CPython 3.12.13 (64-bit) · Apple M4 · macOS-27.0.1-arm64-arm-64bit · 2026-10-20_
 
 These are protocol-layer measurements, not end-to-end client or server
 benchmarks. They exclude sockets, TLS, event-loop scheduling, and application
 work. Results on other systems and workloads will vary.
 
 Inspect the [benchmark source][benchmark-script] and
-[raw result][benchmark-results].
+[raw result][benchmark-results], or follow the
+[reproduction steps](CONTRIBUTING.md#performance-measurements).
 
 ## Contributing
 

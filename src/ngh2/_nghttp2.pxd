@@ -147,6 +147,11 @@ cdef extern from "nghttp2/nghttp2.h":
         void *user_data,
     ) noexcept
 
+    ctypedef int (*nghttp2_send_data_callback)(
+        nghttp2_session *, nghttp2_frame *, const uint8_t *, size_t,
+        nghttp2_data_source *, void *
+    ) noexcept
+
     ctypedef int (*nghttp2_on_frame_recv_callback)(
         nghttp2_session *, const nghttp2_frame *, void *
     ) noexcept
@@ -205,6 +210,7 @@ cdef extern from "nghttp2/nghttp2.h":
         NGHTTP2_NV_FLAG_NO_INDEX
         NGHTTP2_DATA_FLAG_EOF
         NGHTTP2_DATA_FLAG_NO_END_STREAM
+        NGHTTP2_DATA_FLAG_NO_COPY
         NGHTTP2_DATA
         NGHTTP2_HEADERS
         NGHTTP2_RST_STREAM
@@ -224,6 +230,9 @@ cdef extern from "nghttp2/nghttp2.h":
         nghttp2_session_callbacks **callbacks_ptr,
     )
     void nghttp2_session_callbacks_del(nghttp2_session_callbacks *callbacks)
+    void nghttp2_session_callbacks_set_send_data_callback(
+        nghttp2_session_callbacks *, nghttp2_send_data_callback
+    )
     void nghttp2_session_callbacks_set_send_callback2(
         nghttp2_session_callbacks *callbacks,
         nghttp2_send_callback2 send_callback,

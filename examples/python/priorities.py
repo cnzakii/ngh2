@@ -52,11 +52,7 @@ def main() -> None:
         f"for stream {update.prioritized_stream_id}"
     )
 
-    # The application parses its priority policy and asks ngh2 to apply the
-    # resulting urgency and incremental scheduling parameters.
-    priority = ngh2.Priority(urgency=1, incremental=True)
-    if not server.set_stream_priority(stream_id, priority):
-        raise RuntimeError("extensible priority was not enabled locally")
+    # The protocol engine has already parsed and applied the client's signal.
     applied = server.get_stream_priority(stream_id)
     if applied is None:
         raise RuntimeError("the applied priority is unavailable")

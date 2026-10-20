@@ -73,7 +73,7 @@ terminal `StreamClosed`.
 | `ConnectionClosed` | the HTTP/2 state machine needs no more input and has no output left to produce | after writing any bytes returned by the same `data_to_send()` call, close the transport and release connection state |
 | `AltSvcReceived` | raw alternative-service data arrived | parse and cache it only if the client implements Alt-Svc policy and origin authentication |
 | `OriginReceived` | the server advertised an origin set | ignore it without authenticated TLS; otherwise update coalescing policy only after certificate and proxy checks |
-| `PriorityUpdateReceived` | a client supplied a raw RFC 9218 field value | parse policy input and optionally apply a `Priority` with `set_stream_priority()` |
+| `PriorityUpdateReceived` | a client supplied an RFC 9218 field value | inspect the priority already applied by the engine, or override it with `set_stream_priority()` for application policy |
 
 Unknown settings remain integer keys in `SettingsReceived.settings`. Ignore
 unknown values unless an extension implemented by the application assigns

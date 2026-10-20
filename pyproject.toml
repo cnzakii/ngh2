@@ -63,7 +63,7 @@ docs = [
     "zensical>=0.0.51,<0.1",
 ]
 coverage = [
-    "coverage>=7,<8",
+    "coverage>=7.9,<8",
     "cython>=3.1,<4",
 ]
 
@@ -133,11 +133,15 @@ markers = [
 ]
 
 [tool.coverage.run]
+# Cython's plugin needs ctrace; Python 3.14's default sysmon does not support it.
+core = "ctrace"
 plugins = ["Cython.Coverage"]
 source = ["ngh2"]
 
 [tool.coverage.report]
 show_missing = true
+precision = 2
+fail_under = 95.9
 
 [tool.ty.src]
 include = ["src", "tests", "benchmarks", "examples"]

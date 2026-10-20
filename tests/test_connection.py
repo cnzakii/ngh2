@@ -30,7 +30,7 @@ def exchange(source: Connection, destination: Connection) -> bytes:
 
 
 class TestConnection:
-    def test_outbound_headers_require_a_sequence(self):
+    def test_outbound_headers_accept_iterables(self):
         client = Connection(Role.CLIENT)
         client.initiate_connection()
         headers = (
@@ -41,9 +41,8 @@ class TestConnection:
         )
 
         assert client.send_request(headers, end_stream=True) == 1
-        generator = cast(Sequence[Header], (header for header in headers))
-        with pytest.raises(TypeError):
-            client.send_request(generator, end_stream=True)
+        assert client.send_request(iter(headers), end_stream=True) == 3
+        assert client.send_request(dict(headers).items(), end_stream=True) == 5
 
     def test_connection_stays_quiet_until_initiated(self):
         connection = Connection(Role.CLIENT)

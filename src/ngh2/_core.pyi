@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from typing import TypeAlias
 
 from .config import Configuration, Role
@@ -36,27 +36,27 @@ class Connection:
     def data_to_send(self, amount: int | None = None) -> bytes: ...
     def send_request(
         self,
-        headers: Sequence[Header],
+        headers: Iterable[Header],
         *,
         end_stream: bool = False,
     ) -> int: ...
     def send_response(
         self,
         stream_id: int,
-        headers: Sequence[Header],
+        headers: Iterable[Header],
         *,
         end_stream: bool = False,
     ) -> None: ...
     def send_informational_response(
         self,
         stream_id: int,
-        headers: Sequence[Header],
+        headers: Iterable[Header],
     ) -> None: ...
-    def send_trailers(self, stream_id: int, headers: Sequence[Header]) -> None: ...
+    def send_trailers(self, stream_id: int, headers: Iterable[Header]) -> None: ...
     def send_push_promise(
         self,
         stream_id: int,
-        headers: Sequence[Header],
+        headers: Iterable[Header],
     ) -> int: ...
     def send_data(
         self,

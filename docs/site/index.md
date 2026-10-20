@@ -45,7 +45,7 @@ flow-control windows, stream state, and protocol validation.
 
 ### Measured protocol speed
 
-Across the checked public-API workloads, ngh2 delivers roughly 20× the
+Across the checked public-API workloads, ngh2 delivers roughly 18.5–31× the
 protocol-layer throughput of [h2](https://h2.readthedocs.io/).
 
 </div>
@@ -63,8 +63,9 @@ alongside HTTP/2 since the specification's early drafts.
 ### Benchmark details
 
 The recorded `pyperf` run compares complete exchanges through the public APIs
-of ngh2 and h2 4.4.0. It includes stream state transitions, HPACK, flow-control
-accounting, event construction, and frame serialization.
+of ngh2 and hyper-h2. It includes stream state transitions, HPACK, flow-control
+accounting, event construction, and frame serialization. Connections and HPACK
+state are reused across exchanges; the initial handshake is outside the timer.
 
 --8<-- "python-benchmark.md"
 
@@ -73,4 +74,5 @@ benchmarks. They exclude sockets, TLS, event-loop scheduling, and application
 work. Results on other systems and workloads will vary.
 
 [Benchmark source ↗](https://github.com/cnzakii/ngh2/blob/main/benchmarks/compare_h2.py) ·
-[Raw `pyperf` result ↗](https://github.com/cnzakii/ngh2/blob/main/docs/assets/python-benchmark.json)
+[Raw `pyperf` result ↗](https://github.com/cnzakii/ngh2/blob/main/docs/assets/python-benchmark.json) ·
+[Reproduce the measurements](contributing.md#performance-measurements)

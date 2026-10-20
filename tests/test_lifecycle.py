@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from ngh2 import (
@@ -10,6 +12,7 @@ from ngh2 import (
     DataReceived,
     ErrorCode,
     GoAwayReceived,
+    PingReceived,
     RequestReceived,
     ResponseReceived,
     Role,
@@ -26,23 +29,26 @@ REQUEST_HEADERS = [
 ]
 
 
-def handshake(client: Connection, server: Connection) -> None:
-    """Exchange the initial SETTINGS frames and acknowledgements."""
-    client.initiate_connection()
-    server.initiate_connection()
-    for source, destination in (
-        (client, server),
-        (server, client),
-        (client, server),
-        (server, client),
-    ):
-        if data := source.data_to_send():
-            destination.receive_data(data)
-    client.events()
-    server.events()
+@pytest.mark.parametrize("upgrade", [False, True])
+@pytest.mark.parametrize("subclass", [False, True])
+def test_uninitialized_connections_cannot_enter_native_code(
+    upgrade: bool, subclass: bool
+) -> None:
+    class MissingSuper(Connection):
+        def __init__(self):
+            pass
+
+    connection = MissingSuper() if subclass else Connection.__new__(Connection)
+    with pytest.raises(ConnectionStateError, match="not initialized"):
+        if upgrade:
+            connection.initiate_upgrade(b"")
+        else:
+            connection.initiate_connection()
 
 
-def test_end_stream_emits_an_empty_terminal_data_event() -> None:
+def test_end_stream_emits_an_empty_terminal_data_event(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -56,7 +62,9 @@ def test_end_stream_emits_an_empty_terminal_data_event() -> None:
     assert data.end_stream
 
 
-def test_normal_completion_closes_the_stream_on_both_peers() -> None:
+def test_normal_completion_closes_the_stream_on_both_peers(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -79,7 +87,9 @@ def test_normal_completion_closes_the_stream_on_both_peers() -> None:
     assert server_closed.local_error is None
 
 
-def test_remote_reset_releases_unsent_body_data() -> None:
+def test_remote_reset_releases_unsent_body_data(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -100,7 +110,9 @@ def test_remote_reset_releases_unsent_body_data() -> None:
     assert client.queued_body_size() == 0
 
 
-def test_invalid_regular_header_closes_only_its_stream() -> None:
+def test_invalid_regular_header_closes_only_its_stream(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -133,7 +145,9 @@ def test_invalid_regular_header_closes_only_its_stream() -> None:
     assert response.stream_id == sibling_id
 
 
-def test_ignorable_invalid_regular_header_is_rejected() -> None:
+def test_ignorable_invalid_regular_header_is_rejected(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -151,7 +165,9 @@ def test_ignorable_invalid_regular_header_is_rejected() -> None:
     assert reset.error_code == ErrorCode.PROTOCOL_ERROR
 
 
-def test_manual_consumption_emits_connection_and_stream_window_updates() -> None:
+def test_manual_consumption_emits_connection_and_stream_window_updates(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(
         Role.SERVER,
@@ -175,7 +191,9 @@ def test_manual_consumption_emits_connection_and_stream_window_updates() -> None
     }
 
 
-def test_manual_consumption_after_stream_close_updates_connection_window() -> None:
+def test_manual_consumption_after_stream_close_updates_connection_window(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(
         Role.SERVER,
@@ -211,7 +229,9 @@ def test_manual_consumption_requires_manual_window_updates() -> None:
         server.acknowledge_received_data(0, 1)
 
 
-def test_manual_consumption_excludes_padding_already_consumed_by_engine() -> None:
+def test_manual_consumption_excludes_padding_already_consumed_by_engine(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(
         Role.SERVER,
@@ -238,7 +258,9 @@ def test_manual_consumption_excludes_padding_already_consumed_by_engine() -> Non
         server.acknowledge_received_data(1, stream_id)
 
 
-def test_shutdown_notice_stops_new_requests() -> None:
+def test_shutdown_notice_stops_new_requests(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -255,7 +277,9 @@ def test_shutdown_notice_stops_new_requests() -> None:
         client.send_request(REQUEST_HEADERS, end_stream=True)
 
 
-def test_goaway_defaults_to_the_last_processed_peer_stream() -> None:
+def test_goaway_defaults_to_the_last_processed_peer_stream(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -272,7 +296,9 @@ def test_goaway_defaults_to_the_last_processed_peer_stream() -> None:
     assert goaway.last_stream_id == stream_id
 
 
-def test_goaway_closes_a_queued_request_with_the_local_reason() -> None:
+def test_goaway_closes_a_queued_request_with_the_local_reason(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -289,7 +315,9 @@ def test_goaway_closes_a_queued_request_with_the_local_reason() -> None:
     assert isinstance(closed.local_error, ConnectionClosingError)
 
 
-def test_terminate_connection_stops_both_session_directions() -> None:
+def test_terminate_connection_stops_both_session_directions(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -327,7 +355,9 @@ def test_terminate_connection_stops_both_session_directions() -> None:
     assert not client.can_send_request
 
 
-def test_peer_connection_error_finishes_with_goaway_and_closed_event() -> None:
+def test_peer_connection_error_finishes_with_goaway_and_closed_event(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -357,7 +387,9 @@ def test_bad_client_preface_fails_the_connection() -> None:
         server.initiate_connection()
 
 
-def test_queued_response_is_discarded_after_peer_reset() -> None:
+def test_queued_response_is_discarded_after_peer_reset(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -392,3 +424,28 @@ def test_connection_closes_only_with_the_last_limited_output_chunk() -> None:
         pytest.fail("terminal output did not produce ConnectionClosed")
 
     assert not server.want_write
+
+
+def test_terminal_protocol_error_discards_a_queued_ping(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
+    client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
+    handshake(client, server)
+    server.ping(b"pending!")
+    settings_on_stream_one = b"\x00\x00\x00\x04\x00\x00\x00\x00\x01"
+
+    server.receive_data(settings_on_stream_one)
+    client.receive_data(server.data_to_send())
+
+    local_events = server.events()
+    assert len(local_events) == 1
+    assert isinstance(local_events[0], ConnectionClosed)
+    assert local_events[0].error_code == ErrorCode.PROTOCOL_ERROR
+    peer_events = client.events()
+    assert not any(isinstance(event, PingReceived) for event in peer_events)
+    goaway = next(event for event in peer_events if isinstance(event, GoAwayReceived))
+    assert goaway.error_code == ErrorCode.PROTOCOL_ERROR
+    assert not server.want_read
+    assert not server.want_write
+    assert server.data_to_send() == b""
+    assert server.events() == []

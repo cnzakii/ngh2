@@ -42,8 +42,11 @@ target_link_libraries(_core PRIVATE nghttp2)
 target_compile_definitions(_core PRIVATE NGHTTP2_NO_SSIZE_T)
 
 if(NGH2_COVERAGE)
-  target_compile_definitions(_core PRIVATE CYTHON_TRACE=1)
-  target_compile_definitions(events PRIVATE CYTHON_TRACE=1)
+  # Coverage's Cython plugin needs the legacy tracing backend on Python 3.13+.
+  foreach(module IN ITEMS _core events)
+    target_compile_definitions(
+      ${module} PRIVATE CYTHON_TRACE=1 CYTHON_USE_SYS_MONITORING=0)
+  endforeach()
 endif()
 
 install(TARGETS _core events DESTINATION ${SKBUILD_PROJECT_NAME})
