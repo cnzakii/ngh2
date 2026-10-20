@@ -10,6 +10,30 @@ User-visible changes to ngh2 are recorded here.
   both.
 - Wheels for musl-based Linux distributions such as Alpine (`musllinux_1_2`
   on x86_64 and aarch64), which previously built from the source distribution.
+- Header inputs accept iterables, including generators and `headers.items()`.
+
+### Changed
+
+- Reduced body serialization copies for unlimited `data_to_send()` calls,
+  while preserving bounded and mixed output behavior.
+
+### Fixed
+
+- Header submission retains the actual field bytes until the protocol engine
+  has copied them, including fields produced by lazy sequences and custom
+  tuple subclasses. Deferred trailers retain a stable snapshot as well.
+- ORIGIN serialization validates the actual bytes buffer and uses its storage
+  length, including for bytes subclasses.
+- Uninitialized connections and inputs that invalidate a connection during
+  conversion raise state errors instead of entering an unavailable native
+  session.
+- Output failures after serialization begins invalidate the connection rather
+  than allowing later output to silently lose frame bytes. Successful output
+  no longer leaves a redundant staging copy retained by the connection.
+- Configuration limits consistently use the integer values validated during
+  construction, including values supplied through the integer index protocol.
+- The priority example and guide now show that the protocol engine applies
+  client priority signals automatically when extensible priorities are enabled.
 
 ## [0.2.2] - 2026-08-01
 

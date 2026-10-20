@@ -56,5 +56,5 @@ if __name__ == "__main__":
     data_received = package.members["DataReceived"].target
 
     assert "Queue request headers" in send_request.docstring.value
-    assert "Sequence[Header]" in str(send_request.signature())
+    assert "Iterable[Header]" in str(send_request.signature())
     assert data_received.docstring.value.startswith("One complete DATA frame")

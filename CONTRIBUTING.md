@@ -64,6 +64,44 @@ Add or update tests for observable behavior changes. Keep public exports, type
 stubs, documentation, and native behavior synchronized. Include reproducible
 measurements for performance claims.
 
+The coverage job traces the Cython extension and fails below 95.9% line
+coverage. Keep behavior tests focused on observable results rather than
+forcing impossible internal states to reach every line. Allocation-failure
+tests run in isolated, untraced subprocesses: failing the interpreter's
+allocator also interferes with coverage's own bookkeeping. These tests still
+gate correctness where CPython provides `_testcapi`, but their child-process
+execution is not included in the coverage percentage. Remaining gaps include
+native allocation failures, rare error translations, and internal consistency
+guards.
+
+## Performance measurements
+
+Run both implementations from the same checkout and locked environment on an
+otherwise idle machine. Each workload checks that both endpoints complete the
+expected requests, responses, and body transfers before timing starts.
+Connections and HPACK state are reused; timings exclude connection setup,
+sockets, TLS, and application work.
+
+```console
+uv sync --locked
+uv run --locked python benchmarks/compare_h2.py \
+  --processes 20 --values 3 --warmups 3 --min-time 0.1 \
+  -o build/python-benchmark.json
+uv run --locked python -m pyperf convert build/python-benchmark.json \
+  --update-metadata "ngh2_revision=$(git rev-parse HEAD)" \
+  --stdout > docs/assets/python-benchmark.json
+uv run --locked python benchmarks/render_results.py \
+  docs/assets/python-benchmark.json \
+  --svg docs/assets/python-benchmark.svg \
+  --table docs/assets/python-benchmark.md
+```
+
+Use a fresh output filename for each run; `pyperf` does not overwrite existing
+results. Record the measured source revision only when the implementation
+matches that commit. Keep the generated table and the README performance
+section synchronized, and inspect `pyperf` warnings before publishing results.
+The multiplexed workload reports time per exchange within a 100-stream batch.
+
 ## Documentation and examples
 
 Keep the documented learning path in protocol order: first exchange, protocol

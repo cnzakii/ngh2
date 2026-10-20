@@ -1,10 +1,12 @@
 from collections.abc import Callable
+from typing import cast
 
 import pytest
 
 from ngh2 import (
     Connection,
     DataReceived,
+    OriginReceived,
     RequestReceived,
     Role,
 )
@@ -15,22 +17,6 @@ REQUEST_HEADERS = [
     (b":authority", b"example.test"),
     (b":path", b"/upload"),
 ]
-
-
-def handshake(client: Connection, server: Connection) -> None:
-    """Exchange the initial SETTINGS frames and acknowledgements."""
-    client.initiate_connection()
-    server.initiate_connection()
-    for source, destination in (
-        (client, server),
-        (server, client),
-        (client, server),
-        (server, client),
-    ):
-        if data := source.data_to_send():
-            destination.receive_data(data)
-    client.events()
-    server.events()
 
 
 @pytest.mark.parametrize(
@@ -51,7 +37,9 @@ def test_receive_data_accepts_contiguous_buffers(
     assert server.events()
 
 
-def test_send_data_takes_ownership_of_mutable_input() -> None:
+def test_send_data_takes_ownership_of_mutable_input(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
     client = Connection(Role.CLIENT)
     server = Connection(Role.SERVER)
     handshake(client, server)
@@ -66,6 +54,34 @@ def test_send_data_takes_ownership_of_mutable_input() -> None:
         event for event in server.events() if isinstance(event, DataReceived)
     )
     assert received.data == b"original"
+
+
+def test_origin_uses_the_actual_bytes_buffer_length(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
+    class Origin(bytes):
+        def __len__(self):
+            return super().__len__() + 32
+
+    client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
+    handshake(client, server)
+    server.send_origins([Origin(b"https://example.test")])
+    client.receive_data(server.data_to_send())
+
+    origins = next(e for e in client.events() if isinstance(e, OriginReceived))
+    assert origins.origins == (b"https://example.test",)
+
+
+def test_origin_rejects_an_object_spoofing_the_bytes_class() -> None:
+    class PretendBytes:
+        @property
+        def __class__(self):
+            return bytes
+
+    server = Connection(Role.SERVER)
+    server.initiate_connection()
+    with pytest.raises(TypeError, match="each origin must be bytes"):
+        server.send_origins([cast(bytes, PretendBytes())])
 
 
 @pytest.mark.parametrize(

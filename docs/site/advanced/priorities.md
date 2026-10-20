@@ -56,14 +56,27 @@ The client sends the raw structured-field value:
 client.send_priority_update(stream_id, b"u=1, i")
 ```
 
-The server receives `PriorityUpdateReceived`. ngh2 preserves the raw value; the
-application owns parsing and policy. After choosing a `Priority`, the server
-can:
+With extensible priorities enabled, the protocol engine parses the client's
+signal and updates its scheduling priority while `receive_data()` processes
+the frame. The server can inspect the result with `get_stream_priority()`
+without handling the event first. `PriorityUpdateReceived` also preserves the
+raw value for application policy and inspection.
+
+An application that needs its own scheduling policy can choose a `Priority`
+and:
 
 - apply it with `set_stream_priority()`;
 - inspect it with `get_stream_priority()`; and
 - pass `ignore_client_signal=True` when later client updates must not override
   a server policy decision.
+
+```python
+server.set_stream_priority(
+    stream_id,
+    ngh2.Priority(urgency=2, incremental=True),
+    ignore_client_signal=True,
+)
+```
 
 Signals are hints. Servers may combine or ignore them, and clients cannot infer
 that a requested order was honored.

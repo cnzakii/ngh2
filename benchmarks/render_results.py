@@ -35,8 +35,11 @@ def load_results(path: Path) -> tuple[list[tuple[str, float, float]], str, str]:
     metadata = suite.get_metadata()
     _, finished = suite.get_dates()
     h2_version = str(metadata["h2_version"])
+    ngh2_version = f"ngh2 {metadata['ngh2_version']}"
+    if revision := metadata.get("ngh2_revision"):
+        ngh2_version += f" ({str(revision)[:7]})"
     versions = (
-        f"ngh2 {metadata['ngh2_version']}",
+        ngh2_version,
         f"h2 {h2_version}",
         f"CPython {metadata['python_version']}",
     )

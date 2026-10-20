@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import cast
+
 import pytest
 
 from ngh2 import (
@@ -6,31 +9,78 @@ from ngh2 import (
     ConnectionStateError,
     DenialOfServiceError,
     ErrorCode,
+    RequestReceived,
     Role,
     StreamClosed,
     StreamProtocolError,
 )
 
 
-def begin(client: Connection, server: Connection) -> None:
-    client.initiate_connection()
-    server.initiate_connection()
-    server.receive_data(client.data_to_send())
-    client.receive_data(server.data_to_send())
-    server.receive_data(client.data_to_send())
-    client.receive_data(server.data_to_send())
-    client.events()
-    server.events()
+class IndexInteger:
+    def __init__(self, value: int):
+        self.value = value
+
+    def __index__(self) -> int:
+        return self.value
 
 
 class TestResourceLimits:
-    def test_continuation_limit_fails_the_connection(self):
+    @pytest.mark.parametrize(
+        "configure",
+        [
+            lambda limit: Configuration(max_settings=limit),
+            lambda limit: Configuration(max_inbound_header_count=limit),
+            lambda limit: Configuration(max_inbound_header_list_size=limit),
+        ],
+        ids=["settings", "header-count", "header-size"],
+    )
+    @pytest.mark.parametrize("integer", [int, IndexInteger], ids=["int", "index"])
+    def test_integer_configuration_accepts_values_within_limits(
+        self,
+        handshake: Callable[[Connection, Connection], None],
+        configure: Callable[[int], Configuration],
+        integer: Callable[[int], object],
+    ):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER, configure(cast(int, integer(1_000))))
+        handshake(client, server)
+        stream_id = client.send_request(
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/"),
+            ],
+            end_stream=True,
+        )
+
+        server.receive_data(client.data_to_send())
+
+        assert any(
+            isinstance(event, RequestReceived) and event.stream_id == stream_id
+            for event in server.events()
+        )
+
+    @pytest.mark.parametrize("limit", [1, IndexInteger(1)], ids=["int", "index"])
+    def test_settings_limit_rejects_excess_entries(self, limit: int):
+        server = Connection(Role.SERVER, Configuration(max_settings=limit))
+        server.initiate_connection({3: 10})
+
+        with pytest.raises(ValueError, match="configured entry limit"):
+            server.update_settings({3: 10, 4: 65_535})
+
+        server.update_settings({3: 20})
+        assert server.data_to_send()
+
+    def test_continuation_limit_fails_the_connection(
+        self, handshake: Callable[[Connection, Connection], None]
+    ):
         client = Connection(Role.CLIENT)
         server = Connection(
             Role.SERVER,
             Configuration(max_continuations=0),
         )
-        begin(client, server)
+        handshake(client, server)
         client.send_request(
             [
                 (b":method", b"GET"),
@@ -56,13 +106,15 @@ class TestResourceLimits:
         with pytest.raises(ConnectionStateError):
             server.receive_data(b"")
 
-    def test_outbound_ack_limit_fails_the_connection(self):
+    def test_outbound_ack_limit_fails_the_connection(
+        self, handshake: Callable[[Connection, Connection], None]
+    ):
         client = Connection(Role.CLIENT)
         server = Connection(
             Role.SERVER,
             Configuration(max_outbound_ack=1),
         )
-        begin(client, server)
+        handshake(client, server)
         client.ping(b"first---")
         client.ping(b"second--")
 
@@ -71,13 +123,16 @@ class TestResourceLimits:
         with pytest.raises(ConnectionStateError):
             server.receive_data(b"")
 
-    def test_header_count_limit_fails_the_connection(self):
+    @pytest.mark.parametrize("limit", [3, IndexInteger(3)], ids=["int", "index"])
+    def test_header_count_limit_fails_the_connection(
+        self, handshake: Callable[[Connection, Connection], None], limit: int
+    ):
         client = Connection(Role.CLIENT)
         server = Connection(
             Role.SERVER,
-            Configuration(max_inbound_header_count=3),
+            Configuration(max_inbound_header_count=limit),
         )
-        begin(client, server)
+        handshake(client, server)
         client.send_request(
             [
                 (b":method", b"GET"),
@@ -88,20 +143,25 @@ class TestResourceLimits:
             end_stream=True,
         )
 
-        with pytest.raises(DenialOfServiceError):
+        with pytest.raises(
+            DenialOfServiceError, match="header list exceeds configured count"
+        ):
             server.receive_data(client.data_to_send())
         with pytest.raises(ConnectionStateError):
             server.receive_data(b"")
         with pytest.raises(ConnectionStateError):
             server.data_to_send(0)
 
-    def test_header_size_limit_fails_the_connection(self):
+    @pytest.mark.parametrize("limit", [160, IndexInteger(160)], ids=["int", "index"])
+    def test_header_size_limit_fails_the_connection(
+        self, handshake: Callable[[Connection, Connection], None], limit: int
+    ):
         client = Connection(Role.CLIENT)
         server = Connection(
             Role.SERVER,
-            Configuration(max_inbound_header_list_size=160),
+            Configuration(max_inbound_header_list_size=limit),
         )
-        begin(client, server)
+        handshake(client, server)
         client.send_request(
             [
                 (b":method", b"GET"),
@@ -118,13 +178,15 @@ class TestResourceLimits:
         ):
             server.receive_data(client.data_to_send())
 
-    def test_failed_connection_releases_queued_body_data(self):
+    def test_failed_connection_releases_queued_body_data(
+        self, handshake: Callable[[Connection, Connection], None]
+    ):
         client = Connection(
             Role.CLIENT,
             Configuration(max_inbound_header_count=1),
         )
         server = Connection(Role.SERVER)
-        begin(client, server)
+        handshake(client, server)
         stream_id = client.send_request(
             [
                 (b":method", b"POST"),
@@ -148,13 +210,15 @@ class TestResourceLimits:
         assert client.queued_body_size() == 0
         assert client.queued_body_size(stream_id) == 0
 
-    def test_unsent_response_headers_release_queued_body_data(self):
+    def test_unsent_response_headers_release_queued_body_data(
+        self, handshake: Callable[[Connection, Connection], None]
+    ):
         client = Connection(Role.CLIENT)
         server = Connection(
             Role.SERVER,
             Configuration(max_send_header_block_length=64),
         )
-        begin(client, server)
+        handshake(client, server)
         stream_id = client.send_request(
             [
                 (b":method", b"GET"),
@@ -183,13 +247,15 @@ class TestResourceLimits:
         assert server.queued_body_size(stream_id) == 0
         assert server.queued_body_size() == 0
 
-    def test_unsent_request_headers_close_the_reserved_stream(self):
+    def test_unsent_request_headers_close_the_reserved_stream(
+        self, handshake: Callable[[Connection, Connection], None]
+    ):
         client = Connection(
             Role.CLIENT,
             Configuration(max_send_header_block_length=64),
         )
         server = Connection(Role.SERVER)
-        begin(client, server)
+        handshake(client, server)
         stream_id = client.send_request(
             [
                 (b":method", b"GET"),
@@ -209,13 +275,15 @@ class TestResourceLimits:
         assert closed.error_code == ErrorCode.REFUSED_STREAM
         assert isinstance(closed.local_error, StreamProtocolError)
 
-    def test_manual_window_update_rejects_double_acknowledgement(self):
+    def test_manual_window_update_rejects_double_acknowledgement(
+        self, handshake: Callable[[Connection, Connection], None]
+    ):
         client = Connection(Role.CLIENT)
         server = Connection(
             Role.SERVER,
             Configuration(auto_window_update=False),
         )
-        begin(client, server)
+        handshake(client, server)
         server.acknowledge_received_data(0, 1)
         stream_id = client.send_request(
             [

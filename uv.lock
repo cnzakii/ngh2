@@ -570,7 +570,7 @@ test = [
 [package.metadata.requires-dev]
 benchmark = [{ name = "pyperf", specifier = ">=2.10,<3" }]
 coverage = [
-    { name = "coverage", specifier = ">=7,<8" },
+    { name = "coverage", specifier = ">=7.9,<8" },
     { name = "cython", specifier = ">=3.1,<4" },
 ]
 dev = [

@@ -78,6 +78,7 @@ jobs:
           persist-credentials: false
           submodules: true
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv run --locked --no-dev --group docs python docs/griffe_runtime_docstrings.py
       - run: uv run --locked --no-dev --group docs zensical build --strict
 
   python:
@@ -223,6 +224,24 @@ jobs:
           ln -s "$(find "$GITHUB_WORKSPACE/build" -name events.c -print -quit)" src/ngh2/events.c
       - run: uv run --no-sync coverage run -m pytest -m "not h2spec"
       - run: uv run --no-sync coverage xml
+      - name: Verify Cython modules are measured
+        run: |
+          uv run --no-sync python - <<'PY'
+          from xml.etree import ElementTree
+
+          classes = ElementTree.parse("coverage.xml").findall(".//class")
+          for module in ("_core.pyx", "events.pyx"):
+              lines = [
+                  line
+                  for cls in classes
+                  if cls.attrib["filename"].endswith("/" + module)
+                  for line in cls.findall("lines/line")
+              ]
+              assert lines, f"{module} is absent from the coverage report"
+              assert any(int(line.attrib["hits"]) for line in lines), (
+                  f"{module} has no measured execution"
+              )
+          PY
       - run: uv run --no-sync coverage report
       - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:

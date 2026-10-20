@@ -16,6 +16,7 @@ from ngh2 import (
     Priority,
     PriorityUpdateReceived,
     PushDisabledError,
+    PushedStreamReceived,
     ResponseReceived,
     Role,
     Setting,
@@ -345,6 +346,43 @@ class TestControlFrames:
 
         assert server.queued_body_size() == 0
 
+    def test_push_requires_a_client_initiated_parent_without_consuming_an_id(
+        self,
+    ) -> None:
+        client, server = handshake()
+        headers = [
+            (b":method", b"GET"),
+            (b":scheme", b"https"),
+            (b":authority", b"example.test"),
+            (b":path", b"/"),
+        ]
+        stream_id = client.send_request(headers, end_stream=True)
+        server.receive_data(client.data_to_send())
+        server.events()
+        promised_id = server.send_push_promise(stream_id, headers)
+        next_id = server.next_stream_id
+
+        with pytest.raises(ValueError, match="Invalid argument"):
+            server.send_push_promise(promised_id, headers)
+
+        assert server.next_stream_id == next_id
+        for response_id in (stream_id, promised_id):
+            server.send_response(response_id, [(b":status", b"204")], end_stream=True)
+        client.receive_data(server.data_to_send())
+
+        events = client.events()
+        pushed = [event for event in events if isinstance(event, PushedStreamReceived)]
+        assert [event.promised_stream_id for event in pushed] == [promised_id]
+        responses = [event for event in events if isinstance(event, ResponseReceived)]
+        assert {event.stream_id for event in responses} == {stream_id, promised_id}
+        assert all(event.end_stream for event in responses)
+        closed = [event for event in server.events() if isinstance(event, StreamClosed)]
+        assert {event.stream_id for event in closed} == {stream_id, promised_id}
+        assert all(
+            event.error_code == ErrorCode.NO_ERROR and event.local_error is None
+            for event in closed
+        )
+
     def test_push_promise_rejects_an_unknown_associated_stream(self):
         _, server = handshake()
         next_stream_id = server.next_stream_id
@@ -503,8 +541,9 @@ class TestControlFrames:
             item for item in server.events() if isinstance(item, PriorityUpdateReceived)
         )
         assert update.field_value == b"u=1, i"
-        with pytest.raises(ValueError, match="payload exceeds HTTP/2 frame limit"):
-            client.send_priority_update(stream_id, b"x" * ((1 << 24) - 4))
+        assert client.send_priority_update(stream_id, b"x" * (16_384 - 4))
+        with pytest.raises(ValueError):
+            client.send_priority_update(stream_id, b"x" * (16_384 - 3))
         assert server.set_stream_priority(stream_id, Priority(2, True))
         assert server.get_stream_priority(stream_id) == Priority(2, True)
         assert server.set_stream_priority(stream_id, Priority(99))
