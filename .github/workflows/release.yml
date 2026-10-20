@@ -1,6 +1,11 @@
 name: Release
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "pyproject.toml"
+      - "src/ngh2/_version.py"
   push:
     tags: ["v*"]
 
@@ -9,12 +14,12 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
     name: Validate release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -22,6 +27,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Verify tag and package version
+        if: github.event_name == 'push'
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -41,16 +47,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: manylinux-x86_64
-            os: ubuntu-latest
-          - platform: manylinux-aarch64
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+          - platform: linux-aarch64
             os: ubuntu-24.04-arm
           - platform: macos-x86_64
-            os: macos-15-intel
+            os: macos-26-intel
           - platform: macos-aarch64
-            os: macos-14
+            os: macos-26
           - platform: windows-x86_64
-            os: windows-latest
+            os: windows-2025
           - platform: windows-aarch64
             os: windows-11-arm
     steps:
@@ -58,7 +64,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: pypa/cibuildwheel@adba99c781d3746d38b3a09b1cf797965bcb7fe6 # v4.3.0
+      - uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: distributions-${{ matrix.platform }}
@@ -68,7 +74,7 @@ jobs:
   sdist:
     name: Source distribution
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -92,8 +98,9 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
+    if: github.event_name == 'push'
     needs: [wheels, sdist]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
       name: release
@@ -113,8 +120,9 @@ jobs:
 
   github-release:
     name: Publish GitHub release
+    if: github.event_name == 'push'
     needs: publish-pypi
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write

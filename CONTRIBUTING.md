@@ -20,9 +20,8 @@ uv sync --locked
 ```
 
 The default development interpreter is Python 3.12. Continuous integration
-also tests supported CPython 3.10 through 3.14, free-threaded CPython 3.14t,
-prerelease CPython 3.15 and 3.15t,
-and native builds on Linux, macOS, and Windows.
+also tests supported CPython 3.10 through 3.15, free-threaded CPython 3.14t and
+3.15t, and native builds on Linux (glibc and musl), macOS, and Windows.
 
 Enable the repository's pre-commit checks once after cloning:
 
@@ -116,7 +115,10 @@ git push origin vX.Y.Z
 The tag builds and tests the source distribution and platform wheels, publishes
 them to PyPI through Trusted Publishing, and creates the GitHub release. PyPI
 files are immutable; fix a broken release with a new version rather than
-reusing an uploaded filename.
+reusing an uploaded filename. Pull requests that change the release workflow,
+`pyproject.toml`, or `src/ngh2/_version.py`, including release pull requests,
+run the same wheel and source distribution builds and tests without
+publishing.
 
 After publication, verify the PyPI files and installation, the GitHub release,
 and the `stable` documentation build on Read the Docs.
