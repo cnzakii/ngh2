@@ -38,13 +38,21 @@ exception name as a retry decision.
 
 ## Shared protocol types
 
-::: ngh2.Priority
-
 `Header` is the public alias
-`tuple[bytes, bytes] | NeverIndexedHeader`. Header sequences preserve wire
-order; pseudo-header fields precede ordinary fields.
+`tuple[bytes, bytes] | NeverIndexedHeader`. Names and values are bytes;
+pseudo-header fields must precede ordinary fields.
+
+Header-taking methods accept an iterable of `Header` values, including lists,
+tuples, generators, and `headers.items()`. Field order and repeated fields are
+preserved.
+
+The iterable is consumed during the method call, and the submitted values are
+snapshotted. Changing an input container afterward does not change queued
+fields, including trailers that will be sent after the body.
 
 ::: ngh2.NeverIndexedHeader
+
+::: ngh2.Priority
 
 ::: ngh2.ErrorCode
 

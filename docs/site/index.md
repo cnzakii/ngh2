@@ -13,7 +13,8 @@ A fast Sans-I/O HTTP/2 library for Python.
 
 <p class="home-intro__summary">
 Build HTTP/2 clients, servers, proxies, and protocol tools around the transport
-and runtime you already use.
+and runtime you already use. Protocol processing is synchronous; your
+application controls when I/O happens.
 </p>
 
 [Start the tutorial](learn/first-exchange.md){ .md-button .md-button--primary }
@@ -34,28 +35,26 @@ and runtime you already use.
 <div class="home-reasons" markdown>
 <div markdown>
 
-### Messages in, events out
+### Message and event API
 
-Call methods for requests, responses, bodies, trailers, and connection
-controls, then handle the resulting events. ngh2 takes care of frames, HPACK,
-flow-control windows, stream state, and protocol validation.
+Submit requests, responses, bodies, and trailers; handle connection and stream
+events as Python objects. Each connection can carry multiple concurrent streams.
 
 </div>
 <div markdown>
 
 ### Measured protocol speed
 
-Across the checked public-API workloads, ngh2 delivers roughly 18.5–31× the
+Across the checked public-API workloads, ngh2 delivers roughly 20–30× the
 protocol-layer throughput of [h2](https://h2.readthedocs.io/).
 
 </div>
 <div markdown>
 
-### A proven foundation
+### Native protocol engine
 
-[libnghttp2](https://nghttp2.org/documentation/) is the actively maintained
-HTTP/2 implementation underneath ngh2. Its protocol engine has been developed
-alongside HTTP/2 since the specification's early drafts.
+[libnghttp2](https://nghttp2.org/documentation/) handles framing, HPACK,
+flow control, scheduling, and protocol validation.
 
 </div>
 </div>

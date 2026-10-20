@@ -4,36 +4,41 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
 ### Added
 
+- Header-taking APIs accept iterables of byte pairs, including generators and
+  `headers.items()`.
 - Support for CPython 3.15 and free-threaded CPython 3.15t, with wheels for
   both.
 - Wheels for musl-based Linux distributions such as Alpine (`musllinux_1_2`
   on x86_64 and aarch64), which previously built from the source distribution.
-- Header inputs accept iterables, including generators and `headers.items()`.
 
 ### Changed
 
-- Reduced body serialization copies for unlimited `data_to_send()` calls,
-  while preserving bounded and mixed output behavior.
+- Reduced intermediate body copies when `data_to_send()` is called without
+  a byte limit.
+- Release temporary output buffers before `data_to_send()` returns instead of
+  retaining a duplicate until the next call.
+- Argument conversion now completes before connection-state checks. Calls
+  with both invalid arguments and invalid connection state may therefore
+  report the input error first.
 
 ### Fixed
 
-- Header submission retains the actual field bytes until the protocol engine
-  has copied them, including fields produced by lazy sequences and custom
-  tuple subclasses. Deferred trailers retain a stable snapshot as well.
+- Header submission retains valid field bytes from lazy sequences and custom
+  tuple subclasses. Deferred trailers take a stable snapshot when queued.
 - ORIGIN serialization validates the actual bytes buffer and uses its storage
   length, including for bytes subclasses.
 - Uninitialized connections and inputs that invalidate a connection during
-  conversion raise state errors instead of entering an unavailable native
-  session.
+  conversion raise `ConnectionStateError` safely.
 - Output failures after serialization begins invalidate the connection rather
-  than allowing later output to silently lose frame bytes. Successful output
-  no longer leaves a redundant staging copy retained by the connection.
+  than allowing later output to silently lose frame bytes.
 - Configuration limits consistently use the integer values validated during
   construction, including values supplied through the integer index protocol.
-- The priority example and guide now show that the protocol engine applies
-  client priority signals automatically when extensible priorities are enabled.
+- Corrected the priority example and guide to show that client priority signals
+  are applied automatically when extensible priorities are enabled.
 
 ## [0.2.2] - 2026-08-01
 

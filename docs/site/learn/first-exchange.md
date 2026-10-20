@@ -62,11 +62,10 @@ The program has four protocol steps:
 The request uses stream ID `1`, the first client-initiated stream. The response
 uses that same ID so the client can associate it with the request.
 
-Header names and values are bytes. Request, response, and trailer methods
-accept any iterable of field pairs, including lists, tuples, generators, and
-`headers.items()`. ngh2 snapshots the fields when they are submitted, preserving
-their order and any repeated fields. Use a sequence of pairs when a field name
-occurs more than once.
+The example supplies headers as `(name, value)` byte pairs. Pseudo-header
+fields such as `:method` come before ordinary fields. See the
+[header input reference](../reference.md#shared-protocol-types) for accepted
+containers and repeated fields.
 
 ## Keep the driver cycle intact
 
