@@ -96,7 +96,7 @@ The server is configured with `auto_window_update=False`. For each
 then releases exactly `len(event.data)` bytes:
 
 ```python
-server.acknowledge_received_data(len(event.data), event.stream_id)
+server.acknowledge_received_data(amount=len(event.data), stream_id=event.stream_id)
 ```
 
 Frame padding is accounted for internally. Do not add it to the acknowledged

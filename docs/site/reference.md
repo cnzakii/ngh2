@@ -11,6 +11,11 @@ Methods queue protocol operations only. `data_to_send()` returns bytes for the
 caller-owned transport, while `receive_data()` accepts bytes already read by
 that transport.
 
+All public inputs documented as `bytes` accept subclasses, including enums
+derived from `bytes`. This also applies to event constructors. Protocol
+operations use the underlying byte contents and lengths; overriding `__len__`,
+`__bool__`, or `__bytes__` does not change the bytes sent.
+
 | If you need to… | Start with |
 | --- | --- |
 | initialize or drive a connection | `Connection.initiate_connection()`, `receive_data()`, `events()`, `data_to_send()` |

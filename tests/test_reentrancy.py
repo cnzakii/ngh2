@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from typing import cast
@@ -10,6 +11,7 @@ from ngh2 import (
     ConnectionProtocolError,
     ConnectionStateError,
     DenialOfServiceError,
+    NeverIndexedHeader,
     Priority,
     Role,
 )
@@ -214,3 +216,67 @@ def test_buffer_acquisition_cannot_enter_a_failed_native_session() -> None:
 
     with pytest.raises(ConnectionStateError, match="no longer usable"):
         server.receive_data(cast(memoryview, Buffer()))
+
+
+def check_trailer_finalizer_reentrancy(position: str, never_indexed: bool) -> None:
+    config = Configuration(max_outbound_ack=1)
+    client, server = Connection(Role.CLIENT, config), Connection(Role.SERVER, config)
+    client.initiate_connection()
+    server.initiate_connection()
+    for _ in range(2):
+        server.receive_data(client.data_to_send())
+        client.receive_data(server.data_to_send())
+    client.events()
+    server.events()
+    stream_id = client.send_request(REQUEST_HEADERS)
+    server.receive_data(client.data_to_send())
+    server.events()
+    server.ping(b"first---")
+    server.ping(b"second--")
+    flood = server.data_to_send()
+    invalidated = []
+
+    class Field(bytes):
+        def __del__(self):
+            try:
+                client.receive_data(flood)
+            except DenialOfServiceError:
+                invalidated.append(True)
+
+    def headers():
+        name = Field(b"x-test") if position == "name" else b"x-test"
+        value = Field(b"done") if position == "value" else b"done"
+        return [NeverIndexedHeader(name, value) if never_indexed else (name, value)]
+
+    # Drop producer references before output so only queued fields can retain it.
+    with pytest.raises(ConnectionStateError, match="no longer usable"):
+        client.send_trailers(stream_id, headers())
+        client.data_to_send()
+    assert invalidated == [True]
+
+
+@pytest.mark.parametrize("position", ["name", "value"])
+@pytest.mark.parametrize("never_indexed", [False, True])
+def test_trailer_finalizers_cannot_reenter_native_output(
+    position: str, never_indexed: bool
+) -> None:
+    # A native crash must fail this test without taking down the test runner.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-X",
+            "faulthandler",
+            __file__,
+            position,
+            str(int(never_indexed)),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+if __name__ == "__main__":
+    check_trailer_finalizer_reentrancy(sys.argv[1], bool(int(sys.argv[2])))
