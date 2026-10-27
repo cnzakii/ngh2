@@ -171,6 +171,7 @@ cdef class Connection:
     cdef set _responses
     cdef dict _unacknowledged
     cdef dict _local_stream_errors
+    cdef dict _deferred_resets
 
     def __cinit__(self):
         self._session = NULL
@@ -195,6 +196,7 @@ cdef class Connection:
         self._responses = set()
         self._unacknowledged = {}
         self._local_stream_errors = {}
+        self._deferred_resets = {}
 
     def __init__(self, role, config=None):
         cdef _nghttp2.nghttp2_session_callbacks *callbacks = NULL
@@ -736,23 +738,61 @@ cdef class Connection:
         """
         self.send_data(stream_id, b"", end_stream=True)
 
-    def reset_stream(self, stream_id, error_code=0x08):
+    def reset_stream(self, stream_id, error_code=0x08, *, bint after_end_stream=False):
         """Queue an RST_STREAM frame.
+
+        By default the stream stops at once, and headers, body bytes, and
+        trailers still queued for it are discarded. With
+        ``after_end_stream=True``, those frames are sent first and
+        RST_STREAM follows the frame that ends the local direction. If the
+        peer has ended its direction by then, the stream closes normally and
+        no RST_STREAM is sent. A server can use this with ``NO_ERROR`` to stop
+        a request body it no longer needs after a complete response.
 
         Args:
             stream_id: Stream to terminate.
             error_code: HTTP/2 wire error code.
+            after_end_stream: Whether to send the stream's queued frames
+                first. The local direction must already be ended.
 
         Raises:
             ConnectionStateError: If the connection is not active.
+            StreamProtocolError: If ``after_end_stream`` is set before the
+                local direction is ended.
+            StreamUnavailableError: If ``after_end_stream`` is set for a
+                stream that is not open.
             TypeError: If an argument is not an integer.
             ValueError: If an argument is outside its wire range.
         """
         cdef int result
+        cdef _BodySource body
+        cdef bint ended
 
         stream_id = _stream_id(stream_id)
         error_code = _uint32(error_code, "error_code")
         self._require_active()
+        if after_end_stream:
+            self._require_stream(stream_id)
+            if not _nghttp2.nghttp2_session_get_stream_local_close(
+                self._session, stream_id,
+            ):
+                body = self._bodies.get(stream_id)
+                if body is not None:
+                    ended = body.ended
+                else:
+                    # A server stream without a body ended with its response.
+                    ended = (
+                        self.role is Role.CLIENT
+                        or stream_id in self._responses
+                    )
+                if not ended:
+                    raise StreamProtocolError(
+                        "stream local direction is not ended",
+                    )
+                # Submitting now would mark the stream closing and drop its
+                # queued frames, so _frame_sent submits after END_STREAM.
+                self._deferred_resets[stream_id] = error_code
+                return
         result = _nghttp2.nghttp2_submit_rst_stream(
             self._session, _nghttp2.NGHTTP2_FLAG_NONE,
             stream_id, error_code,
@@ -876,6 +916,10 @@ cdef class Connection:
 
     def terminate_connection(self, error_code=0, *, last_stream_id=None):
         """Queue a final GOAWAY and terminate session processing.
+
+        Frames still queued for any stream, including body bytes and
+        trailers, are discarded. Use ``send_goaway()`` instead to let accepted
+        streams finish first.
 
         After this call, use ``data_to_send()`` to obtain the final output.
         Writing that output and handling ``ConnectionClosed`` completes the
@@ -1439,6 +1483,7 @@ cdef class Connection:
         self._responses.clear()
         self._unacknowledged.clear()
         self._local_stream_errors.clear()
+        self._deferred_resets.clear()
 
     cdef void _update_terminal_state(self):
         """Stop accepting work once native state no longer wants any I/O."""
@@ -2439,6 +2484,7 @@ cdef int _stream_closed(
             connection._queued_body_size -= body.queued_size
         connection._data_chunks.pop(stream_id, None)
         connection._responses.discard(stream_id)
+        connection._deferred_resets.pop(stream_id, None)
         if connection._local_stream_errors:
             local_error = connection._local_stream_errors.pop(stream_id, None)
         connection._events.append(StreamClosed(
@@ -2456,13 +2502,37 @@ cdef int _frame_sent(
     const _nghttp2.nghttp2_frame *frame,
     void *user_data,
 ) noexcept:
-    """Remember the final locally serialized GOAWAY reason."""
+    """Submit deferred resets and remember the final GOAWAY reason."""
     cdef Connection connection = <Connection>user_data
+    cdef object error_code
+    cdef int result
+    cdef bint ends_stream = (
+        connection._deferred_resets
+        and frame.hd.flags & _nghttp2.NGHTTP2_FLAG_END_STREAM
+        and frame.hd.type in (_nghttp2.NGHTTP2_DATA, _nghttp2.NGHTTP2_HEADERS)
+    )
 
-    if frame.hd.type != _nghttp2.NGHTTP2_GOAWAY:
+    if not ends_stream and frame.hd.type != _nghttp2.NGHTTP2_GOAWAY:
         return 0
 
     try:
+        if ends_stream:
+            error_code = connection._deferred_resets.pop(
+                frame.hd.stream_id, None,
+            )
+            if error_code is not None and not (
+                _nghttp2.nghttp2_session_get_stream_remote_close(
+                    session, frame.hd.stream_id,
+                )
+            ):
+                result = _nghttp2.nghttp2_submit_rst_stream(
+                    session, _nghttp2.NGHTTP2_FLAG_NONE,
+                    frame.hd.stream_id, error_code,
+                )
+                if result < 0:
+                    _raise_nghttp2_error(result)
+            return 0
+
         connection._closing = True
         connection._close_error_code = frame.goaway.error_code
         connection._close_debug_data = PyBytes_FromStringAndSize(

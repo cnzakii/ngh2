@@ -83,7 +83,18 @@ connection.reset_stream(stream_id, ngh2.ErrorCode.CANCEL)
 ```
 
 The peer receives `StreamReset`; both endpoints eventually receive
-`StreamClosed` and can release that stream's state.
+`StreamClosed` and can release that stream's state. Headers, body bytes, and
+trailers still queued for the stream are discarded.
+
+A server that has queued a complete response but no longer needs the rest of
+the request body can stop it without discarding the response:
+
+```python
+connection.reset_stream(stream_id, ngh2.ErrorCode.NO_ERROR, after_end_stream=True)
+```
+
+The response is sent first, then RST_STREAM. If the client finishes its
+request before the response is sent, the stream closes normally instead.
 
 ngh2 also rejects invalid peer HTTP fields instead of silently passing or
 discarding them. A malformed request or response does not produce the normal
@@ -124,7 +135,7 @@ In a real server:
 5. close the caller-owned transport.
 
 `terminate_connection()` is the immediate final path: it queues a final GOAWAY
-and stops session processing. Drive output, write the returned bytes, then
+and stops session processing, discarding frames still queued for every stream. Drive output, write the returned bytes, then
 handle the resulting `ConnectionClosed` event and close the transport. Use it
 for an unrecoverable connection or after your shutdown policy no longer
 permits further stream work.

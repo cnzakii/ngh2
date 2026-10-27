@@ -405,6 +405,7 @@ cdef extern from "nghttp2/nghttp2.h":
         nghttp2_session *, int32_t
     )
     int nghttp2_session_get_stream_local_close(nghttp2_session *, int32_t)
+    int nghttp2_session_get_stream_remote_close(nghttp2_session *, int32_t)
     uint32_t nghttp2_session_get_local_settings(nghttp2_session *, int32_t)
     uint32_t nghttp2_session_get_remote_settings(nghttp2_session *, int32_t)
     const char *nghttp2_strerror(int lib_error_code)
