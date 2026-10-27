@@ -2506,19 +2506,17 @@ cdef int _frame_sent(
     cdef Connection connection = <Connection>user_data
     cdef object error_code
     cdef int result
+    cdef bint ends_stream = (
+        connection._deferred_resets
+        and frame.hd.flags & _nghttp2.NGHTTP2_FLAG_END_STREAM
+        and frame.hd.type in (_nghttp2.NGHTTP2_DATA, _nghttp2.NGHTTP2_HEADERS)
+    )
 
-    if (
-        frame.hd.type != _nghttp2.NGHTTP2_GOAWAY
-        and not connection._deferred_resets
-    ):
+    if not ends_stream and frame.hd.type != _nghttp2.NGHTTP2_GOAWAY:
         return 0
 
     try:
-        if (
-            connection._deferred_resets
-            and frame.hd.flags & _nghttp2.NGHTTP2_FLAG_END_STREAM
-            and frame.hd.type in (_nghttp2.NGHTTP2_DATA, _nghttp2.NGHTTP2_HEADERS)
-        ):
+        if ends_stream:
             error_code = connection._deferred_resets.pop(
                 frame.hd.stream_id, None,
             )
@@ -2533,9 +2531,6 @@ cdef int _frame_sent(
                 )
                 if result < 0:
                     _raise_nghttp2_error(result)
-            return 0
-
-        if frame.hd.type != _nghttp2.NGHTTP2_GOAWAY:
             return 0
 
         connection._closing = True
