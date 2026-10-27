@@ -4,6 +4,17 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- `reset_stream(..., after_end_stream=True)` sends the stream's queued
+  headers, body bytes, and trailers before RST_STREAM, so a server can stop
+  an unneeded request body with `NO_ERROR` after a complete response.
+
+### Changed
+
+- `reset_stream()` and `terminate_connection()` document that they discard
+  frames still queued for the affected streams.
+
 ### Fixed
 
 - All public `bytes` inputs accept subclasses, including byte-valued enums:

@@ -16,8 +16,12 @@ from ngh2 import (
     RequestReceived,
     ResponseReceived,
     Role,
+    Setting,
     StreamClosed,
+    StreamProtocolError,
     StreamReset,
+    StreamUnavailableError,
+    TrailersReceived,
     WindowUpdated,
 )
 
@@ -108,6 +112,122 @@ def test_remote_reset_releases_unsent_body_data(
     assert closed.local_error is None
     assert client.queued_body_size(stream_id) == 0
     assert client.queued_body_size() == 0
+
+
+@pytest.mark.parametrize("amount", [None, 1024])
+@pytest.mark.parametrize("sent_first", [False, True])
+def test_reset_after_end_stream_follows_the_queued_response(
+    handshake: Callable[[Connection, Connection], None],
+    amount: int | None,
+    sent_first: bool,
+) -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(Role.SERVER)
+    handshake(client, server)
+    stream_id = client.send_request(REQUEST_HEADERS)
+    server.receive_data(client.data_to_send())
+    server.events()
+    server.send_response(stream_id, [(b":status", b"200")])
+    server.send_data(stream_id, b"x" * 10_000)
+    server.send_trailers(stream_id, [(b"grpc-status", b"0")])
+
+    events = []
+    if sent_first:
+        client.receive_data(server.data_to_send())
+        events += client.events()
+    server.reset_stream(stream_id, ErrorCode.NO_ERROR, after_end_stream=True)
+    while output := server.data_to_send(amount):
+        client.receive_data(output)
+    events += client.events()
+
+    assert sum(len(e.data) for e in events if isinstance(e, DataReceived)) == 10_000
+    assert any(isinstance(event, TrailersReceived) for event in events)
+    reset = next(event for event in events if isinstance(event, StreamReset))
+    assert reset.error_code == ErrorCode.NO_ERROR
+    assert isinstance(events[-1], StreamClosed)
+
+
+def test_reset_after_end_stream_waits_for_flow_control(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(Role.SERVER)
+    handshake(client, server)
+    client.update_settings({Setting.INITIAL_WINDOW_SIZE: 0})
+    server.receive_data(client.data_to_send())
+    client.receive_data(server.data_to_send())
+    client.events()
+    server.events()
+    stream_id = client.send_request(REQUEST_HEADERS)
+    server.receive_data(client.data_to_send())
+    server.events()
+    server.send_response(stream_id, [(b":status", b"200")])
+    server.send_data(stream_id, b"answer", end_stream=True)
+
+    server.reset_stream(stream_id, ErrorCode.NO_ERROR, after_end_stream=True)
+    client.receive_data(server.data_to_send())
+
+    events = client.events()
+    assert any(isinstance(event, ResponseReceived) for event in events)
+    assert not any(isinstance(event, (DataReceived, StreamReset)) for event in events)
+    assert server.queued_body_size(stream_id) == len(b"answer")
+
+    client.update_settings({Setting.INITIAL_WINDOW_SIZE: 65_535})
+    server.receive_data(client.data_to_send())
+    server.events()
+    client.receive_data(server.data_to_send())
+
+    events = [
+        event
+        for event in client.events()
+        if isinstance(event, (DataReceived, StreamReset, StreamClosed))
+    ]
+    data, reset, closed = events
+    assert isinstance(data, DataReceived)
+    assert data.data == b"answer"
+    assert data.end_stream
+    assert isinstance(reset, StreamReset)
+    assert reset.error_code == ErrorCode.NO_ERROR
+    assert isinstance(closed, StreamClosed)
+
+
+def test_reset_after_end_stream_is_skipped_when_the_peer_ended_first(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(Role.SERVER)
+    handshake(client, server)
+    stream_id = client.send_request(REQUEST_HEADERS, end_stream=True)
+    server.receive_data(client.data_to_send())
+    server.events()
+    server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
+
+    server.reset_stream(stream_id, ErrorCode.CANCEL, after_end_stream=True)
+    client.receive_data(server.data_to_send())
+
+    events = client.events()
+    assert not any(isinstance(event, StreamReset) for event in events)
+    closed = next(event for event in events if isinstance(event, StreamClosed))
+    assert closed.error_code == ErrorCode.NO_ERROR
+
+
+def test_reset_after_end_stream_requires_an_ended_local_direction(
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
+    client = Connection(Role.CLIENT)
+    server = Connection(Role.SERVER)
+    handshake(client, server)
+    stream_id = client.send_request(REQUEST_HEADERS)
+    server.receive_data(client.data_to_send())
+    server.events()
+
+    with pytest.raises(StreamProtocolError):
+        server.reset_stream(stream_id, after_end_stream=True)
+    server.send_response(stream_id, [(b":status", b"200")])
+    with pytest.raises(StreamProtocolError):
+        server.reset_stream(stream_id, after_end_stream=True)
+    with pytest.raises(StreamUnavailableError):
+        server.reset_stream(stream_id + 2, after_end_stream=True)
 
 
 def test_invalid_regular_header_closes_only_its_stream(
