@@ -4,6 +4,16 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+### Fixed
+
+- All public `bytes` inputs accept subclasses, including byte-valued enums:
+  header names and values, body data, h2c settings, PING and GOAWAY payloads,
+  extension-frame fields, and event constructor arguments.
+- Protocol serialization uses the underlying byte contents and lengths even
+  when a subclass overrides `__len__`, `__bool__`, or `__bytes__`.
+- Queued trailer fields snapshot byte subclasses so their finalizers cannot
+  re-enter the connection during trailer serialization and crash the process.
+
 ## [0.3.0] - 2026-10-20
 
 ### Added

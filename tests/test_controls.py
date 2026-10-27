@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import cast
 
 import pytest
@@ -28,6 +29,28 @@ from ngh2 import (
     WindowUpdated,
     pack_settings_payload,
 )
+
+
+class FieldBytes(bytes):
+    def __len__(self):
+        raise AssertionError("field lengths must use the underlying bytes")
+
+    def __bool__(self):
+        raise AssertionError("field emptiness must use the underlying bytes")
+
+    def __bytes__(self):
+        raise AssertionError("field conversion must use the underlying bytes")
+
+
+class FieldEnum(bytes, Enum):
+    ALT_SVC = b'h3=":443"'
+    ORIGIN = b"https://example.test"
+    EMPTY = b""
+    PRIORITY = b"u=1, i"
+    PING = b"12345678"
+    SHORT = b"short"
+    DEBUG = b"done"
+    SETTINGS = b"\x00\x03\x00\x00\x00\x0a"
 
 
 def handshake() -> tuple[Connection, Connection]:
@@ -69,12 +92,13 @@ class TestControlFrames:
         with pytest.raises(ValueError, match="last_stream_id is out of range"):
             server.send_goaway(last_stream_id=-1)
 
-    def test_ping_requires_exactly_eight_bytes(self):
+    @pytest.mark.parametrize("byte_type", [bytes, FieldBytes, FieldEnum])
+    def test_ping_requires_exactly_eight_bytes(self, byte_type):
         client = Connection(Role.CLIENT)
         client.initiate_connection()
 
         with pytest.raises(ValueError, match="exactly 8 bytes"):
-            client.ping(b"short")
+            client.ping(byte_type(b"short"))
 
     def test_goaway_requires_a_peer_stream_identifier(self):
         server = Connection(Role.SERVER)
@@ -86,9 +110,10 @@ class TestControlFrames:
             server.terminate_connection(last_stream_id=2)
         server.ping()
 
-    def test_h2c_upgrade_uses_binary_settings_payload(self):
+    @pytest.mark.parametrize("byte_type", [bytes, FieldBytes, FieldEnum])
+    def test_h2c_upgrade_uses_binary_settings_payload(self, byte_type):
         settings = {Setting.MAX_CONCURRENT_STREAMS: 10}
-        payload = pack_settings_payload(settings)
+        payload = byte_type(pack_settings_payload(settings))
         client = Connection(Role.CLIENT)
         server = Connection(Role.SERVER)
 
@@ -135,11 +160,12 @@ class TestControlFrames:
             pack_settings_payload({Setting.MAX_CONCURRENT_STREAMS: 10})
         )
 
-    def test_settings_ping_reset_and_goaway_events(self):
+    @pytest.mark.parametrize("byte_type", [bytes, FieldBytes, FieldEnum])
+    def test_settings_ping_reset_and_goaway_events(self, byte_type):
         client, server = handshake()
 
         client.update_settings({Setting.MAX_FRAME_SIZE: 32_768})
-        client.ping(b"12345678")
+        client.ping(byte_type(b"12345678"))
         server.receive_data(client.data_to_send())
         received = server.events()
         assert any(isinstance(item, SettingsReceived) for item in received)
@@ -179,7 +205,7 @@ class TestControlFrames:
         server.send_goaway(
             ErrorCode.NO_ERROR,
             last_stream_id=stream_id,
-            debug_data=b"done",
+            debug_data=byte_type(b"done"),
         )
         client.receive_data(server.data_to_send())
         goaway = next(
@@ -399,10 +425,13 @@ class TestControlFrames:
             )
         assert server.next_stream_id == next_stream_id
 
-    def test_builtin_extension_frames_are_exposed_as_events(self):
+    @pytest.mark.parametrize("byte_type", [bytes, FieldBytes, FieldEnum])
+    def test_builtin_extension_frames_are_exposed_as_events(self, byte_type):
         client, server = handshake()
 
-        server.send_alt_svc(b'h3=":443"', origin=b"https://example.test")
+        server.send_alt_svc(
+            byte_type(b'h3=":443"'), origin=byte_type(b"https://example.test")
+        )
         server.send_origins([b"https://example.test", b"https://cdn.example.test"])
         client.receive_data(server.data_to_send())
 
@@ -456,16 +485,17 @@ class TestControlFrames:
         with pytest.raises(TypeError, match="priority must be a Priority"):
             server.set_stream_priority(1, cast(Priority, object()))
 
-    def test_alt_svc_rejects_inconsistent_scope(self):
+    @pytest.mark.parametrize("byte_type", [bytes, FieldBytes, FieldEnum])
+    def test_alt_svc_rejects_inconsistent_scope(self, byte_type):
         _, server = handshake()
 
         with pytest.raises(ValueError):
-            server.send_alt_svc(b'h3=":443"')
+            server.send_alt_svc(byte_type(b'h3=":443"'), origin=byte_type(b""))
         with pytest.raises(ValueError):
             server.send_alt_svc(
-                b'h3=":443"',
+                byte_type(b'h3=":443"'),
                 stream_id=1,
-                origin=b"https://example.test",
+                origin=byte_type(b"https://example.test"),
             )
 
     def test_origin_payload_must_fit_one_frame(self):
@@ -511,7 +541,8 @@ class TestControlFrames:
         assert closed.error_code == ErrorCode.INTERNAL_ERROR
         assert isinstance(closed.local_error, PushDisabledError)
 
-    def test_extensible_priority_round_trip(self):
+    @pytest.mark.parametrize("byte_type", [bytes, FieldBytes, FieldEnum])
+    def test_extensible_priority_round_trip(self, byte_type):
         client = Connection(Role.CLIENT)
         server = Connection(Role.SERVER)
         settings = {Setting.NO_RFC7540_PRIORITIES: 1}
@@ -535,7 +566,7 @@ class TestControlFrames:
         server.receive_data(client.data_to_send())
         server.events()
 
-        assert client.send_priority_update(stream_id, b"u=1, i")
+        assert client.send_priority_update(stream_id, byte_type(b"u=1, i"))
         server.receive_data(client.data_to_send())
         update = next(
             item for item in server.events() if isinstance(item, PriorityUpdateReceived)

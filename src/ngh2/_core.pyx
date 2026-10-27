@@ -300,7 +300,6 @@ cdef class Connection:
             TypeError: If an argument has the wrong type.
             ValueError: If the settings payload is malformed.
         """
-        cdef bytes payload
         cdef list entries = []
         cdef _nghttp2.nghttp2_settings_entry *native_entries = NULL
         cdef size_t count = 0
@@ -309,9 +308,10 @@ cdef class Connection:
 
         if self.role is Role.CLIENT and local_settings is not None:
             raise ValueError("client upgrade does not accept local_settings")
-        payload = settings_payload
-        if payload:
-            pointer = <const uint8_t *>PyBytes_AS_STRING(payload)
+        if not PyBytes_Check(settings_payload):
+            raise TypeError("settings_payload must be bytes")
+        if PyBytes_GET_SIZE(settings_payload):
+            pointer = <const uint8_t *>PyBytes_AS_STRING(settings_payload)
 
         if self.role is Role.SERVER:
             entries = _normalize_settings(local_settings)
@@ -326,7 +326,8 @@ cdef class Connection:
         self._callback_error = None
         try:
             result = _nghttp2.nghttp2_session_upgrade2(
-                self._session, pointer, len(payload), head_request, NULL,
+                self._session, pointer, PyBytes_GET_SIZE(settings_payload),
+                head_request, NULL,
             )
             self._raise_callback_or_native(result)
         except BaseException:
@@ -694,9 +695,17 @@ cdef class Connection:
         cdef int result
 
         stream_id = _stream_id(stream_id)
-        if not isinstance(data, (bytes, bytearray, memoryview)):
+        if type(data) is bytes:
+            chunk = data
+        elif PyBytes_Check(data):
+            # Keep native DATA callbacks free of subclass hooks and finalizers.
+            chunk = PyBytes_FromStringAndSize(
+                PyBytes_AS_STRING(data), PyBytes_GET_SIZE(data),
+            )
+        elif isinstance(data, (bytearray, memoryview)):
+            chunk = bytes(data)
+        else:
             raise TypeError("data must be a bytes-like object")
-        chunk = data if isinstance(data, bytes) else bytes(data)
         self._require_active()
         try:
             body = self._bodies[stream_id]
@@ -795,16 +804,16 @@ cdef class Connection:
             TypeError: If ``opaque_data`` is not bytes.
             ValueError: If it is not exactly eight bytes long.
         """
-        cdef bytes payload
         cdef int result
 
         self._require_active()
-        payload = opaque_data
-        if len(payload) != 8:
+        if not PyBytes_Check(opaque_data):
+            raise TypeError("opaque_data must be bytes")
+        if PyBytes_GET_SIZE(opaque_data) != 8:
             raise ValueError("opaque_data must contain exactly 8 bytes")
         result = _nghttp2.nghttp2_submit_ping(
             self._session, _nghttp2.NGHTTP2_FLAG_NONE,
-            <const uint8_t *>PyBytes_AS_STRING(payload),
+            <const uint8_t *>PyBytes_AS_STRING(opaque_data),
         )
         if result < 0:
             self._raise_native_error(result)
@@ -822,7 +831,6 @@ cdef class Connection:
             TypeError: If an argument has the wrong type.
             ValueError: If an integer is outside its wire range.
         """
-        cdef bytes payload
         cdef const uint8_t *pointer = NULL
         cdef int result
 
@@ -832,9 +840,10 @@ cdef class Connection:
                 last_stream_id,
                 "last_stream_id",
             )
-        payload = debug_data
-        if payload:
-            pointer = <const uint8_t *>PyBytes_AS_STRING(payload)
+        if not PyBytes_Check(debug_data):
+            raise TypeError("debug_data must be bytes")
+        if PyBytes_GET_SIZE(debug_data):
+            pointer = <const uint8_t *>PyBytes_AS_STRING(debug_data)
         self._require_active()
         if last_stream_id is None:
             last_stream_id = _nghttp2.nghttp2_session_get_last_proc_stream_id(
@@ -842,7 +851,7 @@ cdef class Connection:
             )
         result = _nghttp2.nghttp2_submit_goaway(
             self._session, _nghttp2.NGHTTP2_FLAG_NONE,
-            last_stream_id, error_code, pointer, len(payload),
+            last_stream_id, error_code, pointer, PyBytes_GET_SIZE(debug_data),
         )
         if result < 0:
             self._raise_native_error(result)
@@ -978,7 +987,8 @@ cdef class Connection:
 
         Args:
             stream_id: Stream whose priority is updated.
-            field_value: Raw RFC 9218 Priority field value.
+            field_value: Raw RFC 9218 Priority field value as bytes, including
+                bytes subclasses.
 
         Returns:
             ``True`` when queued, or ``False`` after the peer has explicitly
@@ -990,7 +1000,6 @@ cdef class Connection:
             TypeError: If ``field_value`` is not bytes.
             ValueError: If the payload cannot fit in an HTTP/2 frame.
         """
-        cdef bytes value
         cdef int result
 
         stream_id = _stream_id(stream_id)
@@ -1001,10 +1010,12 @@ cdef class Connection:
             )
         if _nghttp2.nghttp2_session_get_remote_settings(self._session, 9) == 0:
             return False
-        value = field_value
+        if not PyBytes_Check(field_value):
+            raise TypeError("field_value must be bytes")
         result = _nghttp2.nghttp2_submit_priority_update(
             self._session, _nghttp2.NGHTTP2_FLAG_NONE, stream_id,
-            <const uint8_t *>PyBytes_AS_STRING(value), len(value),
+            <const uint8_t *>PyBytes_AS_STRING(field_value),
+            PyBytes_GET_SIZE(field_value),
         )
         if result < 0:
             self._raise_native_error(result)
@@ -1090,9 +1101,11 @@ cdef class Connection:
         """Queue an RFC 7838 ALTSVC frame from a server.
 
         Args:
-            field_value: Raw Alt-Svc field value.
+            field_value: Raw Alt-Svc field value as bytes, including bytes
+                subclasses.
             stream_id: Associated stream, or zero for an origin advertisement.
-            origin: Required origin for connection-level advertisements.
+            origin: Required origin for connection-level advertisements, as
+                bytes including bytes subclasses.
 
         Raises:
             ConnectionStateError: If the connection is not active.
@@ -1100,22 +1113,24 @@ cdef class Connection:
             TypeError: If byte fields or ``stream_id`` have wrong types.
             ValueError: If origin and stream scope are inconsistent.
         """
-        cdef bytes value, origin_value
         cdef const uint8_t *origin_pointer = NULL
         cdef int result
 
         stream_id = _uint31(stream_id, "stream_id")
-        value = field_value
-        origin_value = origin
-        if origin_value:
-            origin_pointer = <const uint8_t *>PyBytes_AS_STRING(origin_value)
+        if not PyBytes_Check(field_value):
+            raise TypeError("field_value must be bytes")
+        if not PyBytes_Check(origin):
+            raise TypeError("origin must be bytes")
+        if PyBytes_GET_SIZE(origin):
+            origin_pointer = <const uint8_t *>PyBytes_AS_STRING(origin)
         self._require_active()
         if self.role is not Role.SERVER:
             raise ConnectionProtocolError("a client cannot send ALTSVC frames")
         result = _nghttp2.nghttp2_submit_altsvc(
             self._session, _nghttp2.NGHTTP2_FLAG_NONE, stream_id,
-            origin_pointer, len(origin_value),
-            <const uint8_t *>PyBytes_AS_STRING(value), len(value),
+            origin_pointer, PyBytes_GET_SIZE(origin),
+            <const uint8_t *>PyBytes_AS_STRING(field_value),
+            PyBytes_GET_SIZE(field_value),
         )
         if result < 0:
             self._raise_native_error(result)
@@ -1590,8 +1605,8 @@ cdef void _apply_configuration(
 cdef list _normalize_headers(object headers, bint deferred=False):
     """Freeze producer-owned fields before advancing to the next item."""
     cdef list result
-    cdef object item
-    cdef bytes name, value
+    cdef object item, name, value
+    cdef bint copy_pair
 
     # Built-in collections need no producer calls; _make_headers freezes pairs.
     if not deferred and (type(headers) is list or type(headers) is tuple):
@@ -1602,9 +1617,22 @@ cdef list _normalize_headers(object headers, bint deferred=False):
             name, value = item
         except (TypeError, ValueError):
             raise TypeError("each header must be a pair of bytes") from None
-        if name is None or value is None:
+        if not PyBytes_Check(name) or not PyBytes_Check(value):
             raise TypeError("each header must be a pair of bytes")
-        if type(item) is not tuple and type(item) is not NeverIndexedHeader:
+        copy_pair = type(item) is not tuple and type(item) is not NeverIndexedHeader
+        if deferred:
+            # Queued fields must not finalize subclasses inside native callbacks.
+            if type(name) is not bytes:
+                name = PyBytes_FromStringAndSize(
+                    PyBytes_AS_STRING(name), PyBytes_GET_SIZE(name),
+                )
+                copy_pair = True
+            if type(value) is not bytes:
+                value = PyBytes_FromStringAndSize(
+                    PyBytes_AS_STRING(value), PyBytes_GET_SIZE(value),
+                )
+                copy_pair = True
+        if copy_pair:
             if isinstance(item, NeverIndexedHeader):
                 item = NeverIndexedHeader(name, value)
             else:
@@ -1620,8 +1648,7 @@ cdef _nghttp2.nghttp2_nv *_make_headers(
     """Borrow field bytes held by the caller-owned snapshot through submit."""
     cdef _nghttp2.nghttp2_nv *native = NULL
     cdef size_t index
-    cdef object header
-    cdef bytes name, value
+    cdef object header, name, value
 
     # Cython uses NULL as this function's exception sentinel, so allocate one
     # unused entry for an empty sequence rather than returning an ambiguous NULL.
@@ -1637,7 +1664,7 @@ cdef _nghttp2.nghttp2_nv *_make_headers(
                 name, value = header
             except (TypeError, ValueError):
                 raise TypeError("each header must be a pair of bytes") from None
-            if name is None or value is None:
+            if not PyBytes_Check(name) or not PyBytes_Check(value):
                 raise TypeError("each header must be a pair of bytes")
             # Custom pairs can yield fresh bytes unrelated to their storage.
             if type(header) is not tuple and type(header) is not NeverIndexedHeader:
@@ -1648,8 +1675,8 @@ cdef _nghttp2.nghttp2_nv *_make_headers(
                 )
             native[index].name = <uint8_t *>PyBytes_AS_STRING(name)
             native[index].value = <uint8_t *>PyBytes_AS_STRING(value)
-            native[index].namelen = len(name)
-            native[index].valuelen = len(value)
+            native[index].namelen = PyBytes_GET_SIZE(name)
+            native[index].valuelen = PyBytes_GET_SIZE(value)
             native[index].flags = (
                 _nghttp2.NGHTTP2_NV_FLAG_NO_INDEX
                 if isinstance(header, NeverIndexedHeader)

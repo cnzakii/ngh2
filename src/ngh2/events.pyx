@@ -1,5 +1,6 @@
 # cython: embedsignature=True, freethreading_compatible=True, language_level=3
 
+from cpython.bytes cimport PyBytes_Check
 from libc.stdint cimport uint32_t
 from types import MappingProxyType
 
@@ -134,15 +135,17 @@ cdef class DataReceived(Event):
     )
 
     cdef readonly int stream_id
-    cdef readonly bytes data
+    cdef readonly object data
     cdef readonly bint end_stream
 
     def __init__(
         self,
         int stream_id,
-        bytes data,
+        object data,
         bint end_stream,
     ):
+        if not PyBytes_Check(data):
+            raise TypeError("data must be bytes")
         self.stream_id = stream_id
         self.data = data
         self.end_stream = end_stream
@@ -218,9 +221,11 @@ cdef class PingReceived(Event):
 
     __match_args__ = ("opaque_data",)
 
-    cdef readonly bytes opaque_data
+    cdef readonly object opaque_data
 
-    def __init__(self, bytes opaque_data):
+    def __init__(self, object opaque_data):
+        if not PyBytes_Check(opaque_data):
+            raise TypeError("opaque_data must be bytes")
         self.opaque_data = opaque_data
 
 
@@ -233,9 +238,11 @@ cdef class PingAcknowledged(Event):
 
     __match_args__ = ("opaque_data",)
 
-    cdef readonly bytes opaque_data
+    cdef readonly object opaque_data
 
-    def __init__(self, bytes opaque_data):
+    def __init__(self, object opaque_data):
+        if not PyBytes_Check(opaque_data):
+            raise TypeError("opaque_data must be bytes")
         self.opaque_data = opaque_data
 
 
@@ -270,9 +277,11 @@ cdef class GoAwayReceived(Event):
 
     cdef readonly int last_stream_id
     cdef readonly uint32_t error_code
-    cdef readonly bytes debug_data
+    cdef readonly object debug_data
 
-    def __init__(self, int last_stream_id, uint32_t error_code, bytes debug_data):
+    def __init__(self, int last_stream_id, uint32_t error_code, object debug_data):
+        if not PyBytes_Check(debug_data):
+            raise TypeError("debug_data must be bytes")
         self.last_stream_id = last_stream_id
         self.error_code = error_code
         self.debug_data = debug_data
@@ -292,9 +301,11 @@ cdef class ConnectionClosed(Event):
     __match_args__ = ("error_code", "debug_data")
 
     cdef readonly uint32_t error_code
-    cdef readonly bytes debug_data
+    cdef readonly object debug_data
 
-    def __init__(self, uint32_t error_code, bytes debug_data):
+    def __init__(self, uint32_t error_code, object debug_data):
+        if not PyBytes_Check(debug_data):
+            raise TypeError("debug_data must be bytes")
         self.error_code = error_code
         self.debug_data = debug_data
 
@@ -311,10 +322,14 @@ cdef class AltSvcReceived(Event):
     __match_args__ = ("stream_id", "origin", "field_value")
 
     cdef readonly int stream_id
-    cdef readonly bytes origin
-    cdef readonly bytes field_value
+    cdef readonly object origin
+    cdef readonly object field_value
 
-    def __init__(self, int stream_id, bytes origin, bytes field_value):
+    def __init__(self, int stream_id, object origin, object field_value):
+        if not PyBytes_Check(origin):
+            raise TypeError("origin must be bytes")
+        if not PyBytes_Check(field_value):
+            raise TypeError("field_value must be bytes")
         self.stream_id = stream_id
         self.origin = origin
         self.field_value = field_value
@@ -346,8 +361,10 @@ cdef class PriorityUpdateReceived(Event):
     __match_args__ = ("prioritized_stream_id", "field_value")
 
     cdef readonly int prioritized_stream_id
-    cdef readonly bytes field_value
+    cdef readonly object field_value
 
-    def __init__(self, int prioritized_stream_id, bytes field_value):
+    def __init__(self, int prioritized_stream_id, object field_value):
+        if not PyBytes_Check(field_value):
+            raise TypeError("field_value must be bytes")
         self.prioritized_stream_id = prioritized_stream_id
         self.field_value = field_value

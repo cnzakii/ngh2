@@ -1,4 +1,5 @@
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from enum import Enum
 from typing import cast, overload
 
 import pytest
@@ -27,6 +28,27 @@ FIELDS = (
     (b"x-repeat", b"second"),
     NeverIndexedHeader(b"x-secret", b"B" * 128),
 )
+
+
+class HeaderBytes(bytes):
+    def __len__(self) -> int:
+        raise AssertionError("header lengths must use the underlying bytes")
+
+    def __bytes__(self) -> bytes:
+        raise AssertionError("header copies must use the underlying bytes")
+
+
+class HttpHeader(bytes, Enum):
+    PATH = b":path"
+    ROOT = b"/"
+    NAME = b"x-extra"
+    VALUE = b"value"
+
+
+class PretendBytes:
+    @property
+    def __class__(self):
+        return bytes
 
 
 class EncodedHeaders(Sequence[Header]):
@@ -155,6 +177,33 @@ def test_header_bytes_survive_submission(operation: str, source_kind: str) -> No
     assert isinstance(event.headers[-1], NeverIndexedHeader)
 
 
+@pytest.mark.parametrize("field_type", [HeaderBytes, HttpHeader])
+@pytest.mark.parametrize("container", [list, tuple, iter])
+def test_headers_accept_bytes_subclasses(
+    field_type: Callable[[bytes], bytes],
+    container: Callable[[Iterable[Header]], Iterable[Header]],
+    handshake: Callable[[Connection, Connection], None],
+) -> None:
+    client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
+    handshake(client, server)
+    field = NeverIndexedHeader(field_type(b"x-extra"), field_type(b"value"))
+    expected_field = NeverIndexedHeader(b"x-extra", b"value")
+    headers = (*REQUEST[:-1], (field_type(b":path"), field_type(b"/")), field)
+
+    stream_id = client.send_request(container(headers))
+    client.send_data(stream_id, b"body")
+    client.send_trailers(stream_id, container([field]))
+    server.receive_data(client.data_to_send())
+
+    events = server.events()
+    request = next(e for e in events if isinstance(e, RequestReceived))
+    trailers = next(e for e in events if isinstance(e, TrailersReceived))
+    assert request.headers == (*REQUEST, expected_field)
+    assert trailers.headers == (expected_field,)
+    assert isinstance(request.headers[-1], NeverIndexedHeader)
+    assert isinstance(trailers.headers[0], NeverIndexedHeader)
+
+
 def test_trailers_snapshot_mutable_fields_before_deferred_submission() -> None:
     client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
     client.initiate_connection()
@@ -177,10 +226,16 @@ def test_trailers_snapshot_mutable_fields_before_deferred_submission() -> None:
     assert event.headers == ((b"x-result", b"original"),)
 
 
-@pytest.mark.parametrize("field", [(None, b"value"), (b"x-name", None)])
+@pytest.mark.parametrize(
+    "invalid",
+    [None, "text", 1, bytearray(b"bytes"), memoryview(b"bytes"), PretendBytes()],
+    ids=["none", "str", "int", "bytearray", "memoryview", "spoofed-bytes"],
+)
+@pytest.mark.parametrize("position", ["name", "value"])
 @pytest.mark.parametrize("operation", ["request", "trailers"])
-def test_none_header_fields_fail_before_submission(
-    field: tuple[bytes | None, bytes | None],
+def test_invalid_header_fields_fail_before_submission(
+    invalid: object,
+    position: str,
     operation: str,
 ) -> None:
     client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
@@ -190,6 +245,7 @@ def test_none_header_fields_fail_before_submission(
     client.receive_data(server.data_to_send())
     server.receive_data(client.data_to_send())
     server.events()
+    field = (invalid, b"value") if position == "name" else (b"x-name", invalid)
     headers = [cast(Header, field)]
 
     if operation == "request":
