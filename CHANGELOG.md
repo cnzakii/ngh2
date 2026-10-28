@@ -4,6 +4,8 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-29
+
 ### Added
 
 - `reset_stream(..., after_end_stream=True)` sends the stream's queued
