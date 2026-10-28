@@ -267,6 +267,17 @@ def machine_name() -> str:
     return platform.processor() or platform.machine()
 
 
+def source_revision() -> str | None:
+    """Return the measured checkout, marked when it has uncommitted changes."""
+    result = subprocess.run(
+        ("git", "describe", "--always", "--dirty"),
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    return result.stdout.strip() or None
+
+
 def main() -> None:
     """Validate workloads and register them with pyperf."""
     check_workloads()
@@ -277,12 +288,15 @@ def main() -> None:
         if args.implementation:
             command.extend(("--implementation", args.implementation))
 
+    metadata = {
+        "ngh2_version": ngh2.__version__,
+        "h2_version": h2.__version__,
+        "machine_name": machine_name(),
+    }
+    if revision := source_revision():
+        metadata["ngh2_revision"] = revision
     runner = pyperf.Runner(
-        metadata={
-            "ngh2_version": ngh2.__version__,
-            "h2_version": h2.__version__,
-            "machine_name": machine_name(),
-        },
+        metadata=metadata,
         add_cmdline_args=add_cmdline_args,
     )
     runner.argparser.add_argument(

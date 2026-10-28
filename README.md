@@ -28,7 +28,7 @@ calls into bytes to send; your code decides how and when those bytes move.
 
 - **Fast.** ngh2 completes HTTP/2 exchanges at least 20× faster than the
   pure-Python [h2](https://h2.readthedocs.io/) in every
-  [measured scenario](#performance).
+  [measured scenario](https://github.com/cnzakii/ngh2#performance).
 - **Proven protocol engine.** Framing, HPACK, flow control, and protocol
   validation come from [libnghttp2](https://nghttp2.org/documentation/), the
   HTTP/2 implementation behind curl, Node.js, and Apache httpd. CI also runs
@@ -126,6 +126,7 @@ measured with `pyperf`. The timer covers stream state, HPACK, flow-control
 accounting, event construction, and frame serialization; connections are set
 up once outside it.
 
+<!-- benchmark-table:start -->
 | Scenario | ngh2 (µs/exchange) | h2 4.4.1 (µs/exchange) | Relative throughput |
 | --- | ---: | ---: | ---: |
 | Small request/204 round trip | 2.01 | 62.36 | 31.0× |
@@ -134,7 +135,8 @@ up once outside it.
 | Request body · 32 KiB | 5.92 | 120.97 | 20.4× |
 | Multiplexed batch · 100 streams | 1.36 | 48.82 | 36.0× |
 
-_Environment: ngh2 0.3.0 (0383356) · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-10-28_
+_Environment: ngh2 0.3.0 · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-10-28_
+<!-- benchmark-table:end -->
 
 These are protocol-layer measurements. They exclude sockets, TLS, event-loop
 scheduling, and application work, so end-to-end gains depend on how much of
@@ -142,7 +144,7 @@ your program's time HTTP/2 processing takes.
 
 Inspect the [benchmark source][benchmark-script] and
 [raw result][benchmark-results], or follow the
-[reproduction steps](CONTRIBUTING.md#performance-measurements).
+[reproduction steps](https://github.com/cnzakii/ngh2/blob/main/CONTRIBUTING.md#performance-measurements).
 
 ## Contributing
 
