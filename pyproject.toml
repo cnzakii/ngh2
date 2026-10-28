@@ -47,7 +47,8 @@ dev = [
 ]
 lint = [
     "cython-lint>=0.21,<0.22",
-    "pre-commit>=4,<5",
+    # filelock, which pre-commit pulls in, has no fixed release for Python 3.10.
+    "pre-commit>=4,<5; python_version >= '3.11'",
     "ruff>=0.15.22,<0.16",
     "ty>=0.0.60,<0.1",
 ]
