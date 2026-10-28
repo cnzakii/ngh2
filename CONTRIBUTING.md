@@ -85,10 +85,11 @@ sockets, TLS, and application work.
 
 ```console
 uv sync --locked
-rm -f docs/assets/python-benchmark.json
+rm -f build/python-benchmark.json
 uv run --locked python benchmarks/compare_h2.py \
   --processes 20 --values 3 --warmups 3 --min-time 0.1 \
-  -o docs/assets/python-benchmark.json
+  -o build/python-benchmark.json
+cp build/python-benchmark.json docs/assets/python-benchmark.json
 uv run --locked python benchmarks/render_results.py \
   docs/assets/python-benchmark.json \
   --svg docs/assets/python-benchmark.svg \
@@ -96,10 +97,11 @@ uv run --locked python benchmarks/render_results.py \
   --readme README.md
 ```
 
-The result records the measured checkout with `git describe --dirty`, and the
-renderer updates the README table between its markers; a test fails if the two
-drift apart. Inspect `pyperf` warnings before publishing results. The
-multiplexed workload reports time per exchange within a 100-stream batch.
+The result records the measured checkout with `git describe --dirty`, so it is
+written outside tracked files while measuring. The renderer updates the README
+table between its markers; a test fails if the two drift apart. Inspect
+`pyperf` warnings before publishing results. The multiplexed workload reports
+time per exchange within a 100-stream batch.
 
 Refresh the published comparison for each release. Between releases,
 [CodSpeed](https://codspeed.io/) runs the ngh2 side of the same workloads on
