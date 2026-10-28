@@ -85,23 +85,29 @@ sockets, TLS, and application work.
 
 ```console
 uv sync --locked
+rm -f docs/assets/python-benchmark.json
 uv run --locked python benchmarks/compare_h2.py \
   --processes 20 --values 3 --warmups 3 --min-time 0.1 \
-  -o build/python-benchmark.json
-uv run --locked python -m pyperf convert build/python-benchmark.json \
-  --update-metadata "ngh2_revision=$(git rev-parse HEAD)" \
-  --stdout > docs/assets/python-benchmark.json
+  -o docs/assets/python-benchmark.json
 uv run --locked python benchmarks/render_results.py \
   docs/assets/python-benchmark.json \
   --svg docs/assets/python-benchmark.svg \
-  --table docs/assets/python-benchmark.md
+  --table docs/assets/python-benchmark.md \
+  --readme README.md
 ```
 
-Use a fresh output filename for each run; `pyperf` does not overwrite existing
-results. Record the measured source revision only when the implementation
-matches that commit. Keep the generated table and the README performance
-section synchronized, and inspect `pyperf` warnings before publishing results.
-The multiplexed workload reports time per exchange within a 100-stream batch.
+The result records the measured checkout with `git describe --dirty`, and the
+renderer updates the README table between its markers; a test fails if the two
+drift apart. Inspect `pyperf` warnings before publishing results. The
+multiplexed workload reports time per exchange within a 100-stream batch.
+
+Refresh the published comparison for each release. Between releases,
+[CodSpeed](https://codspeed.io/) runs the ngh2 side of the same workloads on
+every pull request and reports changes against `main`. Run them locally with:
+
+```console
+uv run --locked pytest benchmarks/test_codspeed.py --codspeed
+```
 
 ## Documentation and examples
 

@@ -17,6 +17,8 @@ SCENARIOS = (
     ("multiplexed_100", "Multiplexed batch · 100 streams"),
 )
 MULTIPLICATION_SIGN = "\N{MULTIPLICATION SIGN}"
+TABLE_START = "<!-- benchmark-table:start -->"
+TABLE_END = "<!-- benchmark-table:end -->"
 
 
 def load_results(path: Path) -> tuple[list[tuple[str, float, float]], str, str]:
@@ -35,11 +37,8 @@ def load_results(path: Path) -> tuple[list[tuple[str, float, float]], str, str]:
     metadata = suite.get_metadata()
     _, finished = suite.get_dates()
     h2_version = str(metadata["h2_version"])
-    ngh2_version = f"ngh2 {metadata['ngh2_version']}"
-    if revision := metadata.get("ngh2_revision"):
-        ngh2_version += f" ({str(revision)[:7]})"
     versions = (
-        ngh2_version,
+        f"ngh2 {metadata['ngh2_version']}",
         f"h2 {h2_version}",
         f"CPython {metadata['python_version']}",
     )
@@ -160,12 +159,26 @@ def render_table(
     return "\n".join(lines) + "\n"
 
 
+def replace_marked_table(document: str, table: str) -> str:
+    """Return the document with the text between the table markers replaced."""
+    before, start, rest = document.partition(TABLE_START)
+    _, end, after = rest.partition(TABLE_END)
+    if not start or not end:
+        raise ValueError("benchmark table markers not found")
+    return f"{before}{TABLE_START}\n{table}{TABLE_END}{after}"
+
+
 def main() -> None:
     """Load pyperf JSON and write the requested presentation artifacts."""
     parser = argparse.ArgumentParser()
     parser.add_argument("results", type=Path)
     parser.add_argument("--svg", required=True, type=Path)
     parser.add_argument("--table", type=Path)
+    parser.add_argument(
+        "--readme",
+        type=Path,
+        help="replace the table between the README benchmark markers",
+    )
     args = parser.parse_args()
 
     rows, details, h2_version = load_results(args.results)
@@ -180,6 +193,11 @@ def main() -> None:
         args.table.write_text(table, encoding="utf-8")
     else:
         print(table, end="")
+    if args.readme:
+        args.readme.write_text(
+            replace_marked_table(args.readme.read_text(encoding="utf-8"), table),
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":

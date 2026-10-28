@@ -118,6 +118,18 @@ def test_readme_quick_look_prints_its_documented_output(
     assert capsys.readouterr().out == expected_output
 
 
+def test_readme_benchmark_table_matches_rendered_results() -> None:
+    root = Path(__file__).parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    table = (root / "docs" / "assets" / "python-benchmark.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        f"<!-- benchmark-table:start -->\n{table}<!-- benchmark-table:end -->" in readme
+    )
+
+
 def test_asyncio_example_cli_help(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

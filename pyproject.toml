@@ -57,6 +57,7 @@ test = [
 ]
 benchmark = [
     "pyperf>=2.10,<3",
+    "pytest-codspeed>=5,<6",
 ]
 docs = [
     "mkdocstrings-python>=2.0.5,<3",

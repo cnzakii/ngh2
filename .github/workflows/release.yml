@@ -129,9 +129,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Create release
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Create release from the changelog entry
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes
+        run: |
+          awk -v heading="## [${RELEASE_TAG#v}] - " \
+            'index($0, heading) == 1 { found = 1; next } found && /^## \[/ { exit } found' \
+            CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"
+          gh release create "$RELEASE_TAG" --verify-tag --notes-file "$RUNNER_TEMP/notes.md"
