@@ -15,7 +15,7 @@ been accepted, its later outcome is part of that stream's event lifecycle.
 | an argument or operation is rejected before it is queued | a synchronous exception such as `TypeError`, `ValueError`, or an `NGH2Error` subclass | the method documents the contract; a rejected local call does not automatically mean every stream is lost |
 | peer input cannot be processed safely or exceeds a configured resource limit | `ConnectionProtocolError` or `DenialOfServiceError` from `receive_data()` | the connection is failed; close its transport |
 | the state machine handles a connection-level protocol error by producing a final GOAWAY | `ConnectionClosed` after output is driven | write the final output, then close the transport |
-| one stream cannot accept an operation | `StreamProtocolError` or a stream-specific subclass | other streams and the connection can continue |
+| one stream cannot accept an operation | `StreamStateError` or a subclass | other streams and the connection can continue |
 | the peer resets one stream | `StreamReset`, followed by `StreamClosed` | other streams and the connection can continue |
 | an accepted local stream operation cannot complete later | `StreamClosed.local_error` | fail that stream; unrelated streams normally remain usable |
 | a malformed peer message causes a stream error | `StreamClosed` with a nonzero `error_code` | fail that stream and continue driving the connection |
@@ -24,23 +24,25 @@ been accepted, its later outcome is part of that stream's event lifecycle.
 After a fatal receive error, later protocol calls raise `ConnectionStateError`.
 Do not reuse that object for a new transport.
 
-## Act on the operation, not only the class
+## Tell local misuse from protocol violations
 
-The same exception family can describe rejected local usage or peer input.
-Use the method that raised it and the documented scope:
+State errors reject a call that does not fit the connection's role or the
+current connection or stream state. Protocol errors report a violation of
+HTTP/2 rules, usually by the peer:
 
 | Exception | Typical meaning | Next action |
 | --- | --- | --- |
 | `NGH2Error` | base class for ngh2 operational errors | catch only where a shared fallback exists; prefer a specific subclass |
-| `ProtocolError` | base class for stream- and connection-level protocol errors | inspect the subclass and the method that raised it |
-| `ConnectionStateError` | the operation is too early, too late, or the object already failed | fix local lifecycle ordering; after a fatal receive error, close the transport and discard the object |
-| `ConnectionProtocolError` | a connection-scoped peer violation, or a locally rejected role operation | from `receive_data()`, close the failed connection; for a rejected local call, fix the operation |
-| `DenialOfServiceError` | peer input exceeded a configured connection resource limit | close the transport; do not replay the bytes into a looser live object |
-| `StreamProtocolError` | the operation violates one stream's message state | fail or correct that stream operation; unrelated streams can continue |
+| `ConnectionStateError` | the call is too early, too late, wrong for this role, or the object already failed | fix local lifecycle ordering; after a fatal receive error, close the transport and discard the object |
+| `ConnectionClosingError` | GOAWAY or shutdown prevents a new request | submit new work on a replacement connection |
+| `NoAvailableStreamIDError` | no local stream identifier remains | drain the connection and create a replacement |
+| `StreamStateError` | the call does not fit one stream's message state | fail or correct that stream operation; unrelated streams can continue |
 | `StreamUnavailableError` | the stream no longer exists or cannot accept the operation | stop work for that stream and release its application state |
 | `PushDisabledError` | peer settings invalidated an accepted push promise | skip the promised stream; the parent stream can continue |
-| `ConnectionClosingError` | GOAWAY, shutdown, or ID state prevents a new request | submit new work on a replacement connection |
-| `NoAvailableStreamIDError` | no local stream identifier remains | drain the connection and create a replacement |
+| `ProtocolError` | base class for violations of HTTP/2 rules | inspect the subclass |
+| `ConnectionProtocolError` | peer input violated HTTP/2 at connection scope | close the failed connection |
+| `DenialOfServiceError` | peer input exceeded a configured connection resource limit | close the transport; do not replay the bytes into a looser live object |
+| `StreamProtocolError` | an accepted stream operation broke a protocol rule when it was sent, reported as `StreamClosed.local_error` | fail that stream; unrelated streams can continue |
 | `InternalError` | the protocol engine encountered an unexpected failure | close the transport and discard the connection |
 
 `TypeError`, `ValueError`, `BufferError`, and `MemoryError`
@@ -73,8 +75,9 @@ their stream ID. The connection driver should keep GOAWAY, connection closure,
 SETTINGS, and PING visible even when no request task is currently waiting for
 them.
 
-`ErrorCode` represents values carried on the wire in RST_STREAM and GOAWAY. It
-does not replace Python exception handling.
+`ErrorCode` represents values carried on the wire in RST_STREAM and GOAWAY.
+Events report known codes as `ErrorCode` members and extension codes as plain
+integers. Wire codes do not replace Python exception handling.
 
 To cancel one request without closing the connection:
 

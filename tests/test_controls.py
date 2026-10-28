@@ -7,7 +7,6 @@ from ngh2 import (
     AltSvcReceived,
     Configuration,
     Connection,
-    ConnectionProtocolError,
     ConnectionStateError,
     ErrorCode,
     GoAwayReceived,
@@ -98,7 +97,7 @@ class TestControlFrames:
         client.initiate_connection()
 
         with pytest.raises(ValueError, match="exactly 8 bytes"):
-            client.ping(byte_type(b"short"))
+            client.send_ping(byte_type(b"short"))
 
     def test_goaway_requires_a_peer_stream_identifier(self):
         server = Connection(Role.SERVER)
@@ -108,7 +107,7 @@ class TestControlFrames:
             server.send_goaway(last_stream_id=2)
         with pytest.raises(ValueError, match="Invalid argument"):
             server.terminate_connection(last_stream_id=2)
-        server.ping()
+        server.send_ping()
 
     @pytest.mark.parametrize("byte_type", [bytes, FieldBytes, FieldEnum])
     def test_h2c_upgrade_uses_binary_settings_payload(self, byte_type):
@@ -165,7 +164,7 @@ class TestControlFrames:
         client, server = handshake()
 
         client.update_settings({Setting.MAX_FRAME_SIZE: 32_768})
-        client.ping(byte_type(b"12345678"))
+        client.send_ping(byte_type(b"12345678"))
         server.receive_data(client.data_to_send())
         received = server.events()
         assert any(isinstance(item, SettingsReceived) for item in received)
@@ -241,16 +240,16 @@ class TestControlFrames:
         assert client.want_read
         assert client.can_send_request
         assert client.next_stream_id == 3
-        assert client.remote_window_size > 0
-        assert client.local_window_size > 0
-        assert client.stream_remote_window_size(stream_id) > 0
-        assert client.stream_local_window_size(stream_id) > 0
+        assert client.remote_window_size() > 0
+        assert client.local_window_size() > 0
+        assert client.remote_window_size(stream_id) > 0
+        assert client.local_window_size(stream_id) > 0
         assert client.remote_settings[Setting.MAX_FRAME_SIZE] == 16_384
 
         with pytest.raises(StreamUnavailableError):
-            client.stream_remote_window_size(99)
+            client.remote_window_size(99)
         with pytest.raises(StreamUnavailableError):
-            client.stream_local_window_size(99)
+            client.local_window_size(99)
 
     def test_set_local_window_size_updates_connection_and_stream_capacity(self):
         client, server = handshake()
@@ -276,8 +275,8 @@ class TestControlFrames:
             (0, 34_465),
             (stream_id, 24_465),
         }
-        assert server.local_window_size == 100_000
-        assert server.stream_local_window_size(stream_id) == 90_000
+        assert server.local_window_size() == 100_000
+        assert server.local_window_size(stream_id) == 90_000
 
         with pytest.raises(StreamUnavailableError):
             server.set_local_window_size(1, stream_id=99)
@@ -340,7 +339,7 @@ class TestControlFrames:
         client.initiate_connection()
         with pytest.raises(ValueError, match="Invalid argument"):
             client.update_settings(invalid_settings)
-        client.ping()
+        client.send_ping()
 
         server = Connection(Role.SERVER)
         with pytest.raises(ValueError, match="Invalid argument"):
@@ -451,29 +450,25 @@ class TestControlFrames:
     def test_role_specific_operations_reject_the_wrong_endpoint(self):
         client, server = handshake()
 
-        with pytest.raises(
-            ConnectionProtocolError, match="server cannot send requests"
-        ):
+        with pytest.raises(ConnectionStateError, match="server cannot send requests"):
             server.send_request([])
-        with pytest.raises(
-            ConnectionProtocolError, match="client cannot send responses"
-        ):
+        with pytest.raises(ConnectionStateError, match="client cannot send responses"):
             client.send_response(1, [])
-        with pytest.raises(ConnectionProtocolError, match="informational responses"):
+        with pytest.raises(ConnectionStateError, match="informational responses"):
             client.send_informational_response(1, [])
-        with pytest.raises(ConnectionProtocolError, match="push promises"):
+        with pytest.raises(ConnectionStateError, match="push promises"):
             client.send_push_promise(1, [])
-        with pytest.raises(ConnectionProtocolError, match="shutdown notices"):
+        with pytest.raises(ConnectionStateError, match="shutdown notices"):
             client.send_shutdown_notice()
-        with pytest.raises(ConnectionProtocolError, match="PRIORITY_UPDATE"):
+        with pytest.raises(ConnectionStateError, match="PRIORITY_UPDATE"):
             server.send_priority_update(1, b"u=1")
-        with pytest.raises(ConnectionProtocolError, match="set server scheduling"):
+        with pytest.raises(ConnectionStateError, match="set server scheduling"):
             client.set_stream_priority(1, Priority())
-        with pytest.raises(ConnectionProtocolError, match="query server scheduling"):
+        with pytest.raises(ConnectionStateError, match="query server scheduling"):
             client.get_stream_priority(1)
-        with pytest.raises(ConnectionProtocolError, match="ALTSVC"):
+        with pytest.raises(ConnectionStateError, match="ALTSVC"):
             client.send_alt_svc(b'h3=":443"')
-        with pytest.raises(ConnectionProtocolError, match="ORIGIN"):
+        with pytest.raises(ConnectionStateError, match="ORIGIN"):
             client.send_origins([])
 
     def test_extensible_priority_reports_disabled_state(self):

@@ -31,9 +31,7 @@ def consume_available_data(connection: ngh2.Connection) -> int:
             consumed += len(event.data)
             # Manual mode ties WINDOW_UPDATE to application consumption. Frame
             # padding is accounted for by ngh2 and must not be added here.
-            connection.acknowledge_received_data(
-                amount=len(event.data), stream_id=event.stream_id
-            )
+            connection.consume_received_data(event.stream_id, len(event.data))
     return consumed
 
 

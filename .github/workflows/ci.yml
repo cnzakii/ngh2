@@ -25,6 +25,7 @@ jobs:
     outputs:
       code: ${{ steps.paths.outputs.code }}
       docs: ${{ steps.paths.outputs.docs }}
+      python: ${{ steps.python.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -46,6 +47,13 @@ jobs:
             git diff --name-only "$BASE_SHA...$GITHUB_SHA" |
               sh .github/scripts/classify-changes.sh >> "$GITHUB_OUTPUT"
           fi
+      # .python-version is the single source of the development interpreter.
+      - name: Read the development Python version
+        id: python
+        run: |
+          version="$(cat .python-version)"
+          grep -Eq '^3\.[0-9]+$' <<< "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   lint:
     name: Lint and static analysis
@@ -61,6 +69,9 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - run: uv sync --locked
       - run: uv run --locked pre-commit run --all-files
+      - name: Keep Read the Docs on the development Python version
+        run: |
+          grep -Fqx "    python: \"$(cat .python-version)\"" .readthedocs.yaml
       - name: Validate benchmark workloads
         run: >-
           uv run --locked python -c
@@ -94,15 +105,15 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15", "3.15t"]
         include:
           - os: ubuntu-24.04-arm
-            python-version: "3.12"
+            python-version: ${{ needs.changes.outputs.python }}
           - os: macos-26-intel
-            python-version: "3.12"
+            python-version: ${{ needs.changes.outputs.python }}
           - os: macos-26
-            python-version: "3.12"
+            python-version: ${{ needs.changes.outputs.python }}
           - os: windows-2025
-            python-version: "3.12"
+            python-version: ${{ needs.changes.outputs.python }}
           - os: windows-11-arm
-            python-version: "3.12"
+            python-version: ${{ needs.changes.outputs.python }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -115,7 +126,7 @@ jobs:
       - run: uv run --locked --no-dev --group test pytest -m "not h2spec"
 
   python-musl:
-    name: Python 3.12 on musllinux ${{ matrix.arch }}
+    name: Python ${{ needs.changes.outputs.python }} on musllinux ${{ matrix.arch }}
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
@@ -137,14 +148,49 @@ jobs:
       # on arm64, so the tests run through docker run instead of a job
       # container.
       - name: Test in Alpine
+        env:
+          PYTHON_VERSION: ${{ needs.changes.outputs.python }}
         run: |
           docker run --rm --volume "$PWD:/work" --workdir /work \
             --env UV_PYTHON_DOWNLOADS=never \
-            ghcr.io/astral-sh/uv:python3.12-alpine sh -euxc '
+            "ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-alpine" sh -euxc '
               apk add --no-cache build-base cmake
               uv sync --locked --no-dev --group test
               uv run --locked --no-dev --group test pytest -m "not h2spec"
             '
+
+  sanitizers:
+    name: AddressSanitizer and UBSan
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # Instrument the binding and libnghttp2; the test step preloads the runtimes.
+      CFLAGS: >-
+        -fsanitize=address,undefined -fno-sanitize-recover=undefined
+        -fno-omit-frame-pointer -g -O1
+      LDFLAGS: -fsanitize=address,undefined
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Build the instrumented extension
+        run: >-
+          uv --no-cache sync --locked --no-dev --group test
+          --reinstall-package ngh2 --config-setting install.strip=false
+      - name: Run tests under the sanitizers
+        env:
+          # CPython leaks at exit by design; pymalloc would hide object overruns.
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1
+          PYTHONMALLOC: malloc
+        # sys capture leaves fd 2 alone, so a report survives the abort.
+        run: |
+          LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)" \
+            .venv/bin/python -m pytest -m "not h2spec" --capture=sys
 
   h2spec:
     name: h2spec generic conformance
@@ -261,6 +307,7 @@ jobs:
       - docs
       - python
       - python-musl
+      - sanitizers
       - h2spec
       - package
       - coverage

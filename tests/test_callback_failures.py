@@ -26,7 +26,7 @@ def assert_connection_failed(connection: Connection) -> None:
     with pytest.raises(ConnectionStateError, match="no longer usable"):
         connection.data_to_send()
     with pytest.raises(ConnectionStateError, match="no longer usable"):
-        connection.ping()
+        connection.send_ping()
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def test_received_event_allocation_failure_invalidates_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, server, _ = pending_upload
-    server.ping()
+    server.send_ping()
     incoming = server.data_to_send()
     monkeypatch.setattr("ngh2._core.PingReceived", fail_allocation)
 

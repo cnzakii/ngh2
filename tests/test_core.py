@@ -11,9 +11,13 @@ from ngh2 import (
     Configuration,
     Connection,
     ConnectionStateError,
+    ErrorCode,
     NGH2Error,
     RequestReceived,
     Role,
+    Setting,
+    SettingsReceived,
+    StreamReset,
     __version__,
     pack_settings_payload,
 )
@@ -67,7 +71,7 @@ class TestCore:
         assert connection.role is Role.CLIENT
         assert connection.config == Configuration(
             auto_window_update=True,
-            peer_max_concurrent_streams=100,
+            initial_peer_max_concurrent_streams=100,
             max_reserved_remote_streams=200,
             max_send_header_block_length=65_536,
             max_deflate_dynamic_table_size=4_096,
@@ -88,7 +92,7 @@ class TestCore:
 
     def test_configuration_accepts_zero_native_limits(self):
         configuration = Configuration(
-            peer_max_concurrent_streams=0,
+            initial_peer_max_concurrent_streams=0,
             max_deflate_dynamic_table_size=0,
         )
 
@@ -99,8 +103,8 @@ class TestCore:
     @pytest.mark.parametrize(
         "configuration",
         [
-            Configuration(peer_max_concurrent_streams=-1),
-            Configuration(peer_max_concurrent_streams=1 << 32),
+            Configuration(initial_peer_max_concurrent_streams=-1),
+            Configuration(initial_peer_max_concurrent_streams=1 << 32),
             Configuration(max_settings=0),
             Configuration(max_settings=-1),
             Configuration(stream_reset_rate_limit=(1 << 64, 1)),
@@ -120,7 +124,7 @@ class TestCore:
     @pytest.mark.parametrize(
         "configuration",
         [
-            Configuration(peer_max_concurrent_streams=cast(int, 1.5)),
+            Configuration(initial_peer_max_concurrent_streams=cast(int, 1.5)),
             Configuration(max_settings=cast(int, 1.5)),
             Configuration(stream_reset_rate_limit=cast(tuple[int, int], (1.5, 1))),
         ],
@@ -252,6 +256,18 @@ class TestCore:
             "RequestReceived(stream_id=1, "
             "headers=((b':method', b'GET'),), end_stream=True)"
         )
+
+    def test_known_wire_values_are_enum_members(self):
+        assert StreamReset(1, 8).error_code is ErrorCode.CANCEL
+        assert type(StreamReset(1, 0xFF).error_code) is int
+
+        settings = SettingsReceived({4: 100, 0xFF: 1}).settings
+        assert list(settings) == [Setting.INITIAL_WINDOW_SIZE, 0xFF]
+        assert type(list(settings)[1]) is int
+
+        connection = Connection(Role.CLIENT)
+        connection.initiate_connection()
+        assert all(type(key) is Setting for key in connection.local_settings)
 
     def test_data_to_send_respects_amount(self):
         connection = Connection(Role.CLIENT)

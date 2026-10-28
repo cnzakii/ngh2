@@ -115,8 +115,8 @@ class TestResourceLimits:
             Configuration(max_outbound_ack=1),
         )
         handshake(client, server)
-        client.ping(b"first---")
-        client.ping(b"second--")
+        client.send_ping(b"first---")
+        client.send_ping(b"second--")
 
         with pytest.raises(DenialOfServiceError, match="Flooding was detected"):
             server.receive_data(client.data_to_send())
@@ -284,7 +284,7 @@ class TestResourceLimits:
             Configuration(auto_window_update=False),
         )
         handshake(client, server)
-        server.acknowledge_received_data(0, 1)
+        server.consume_received_data(1, 0)
         stream_id = client.send_request(
             [
                 (b":method", b"POST"),
@@ -296,6 +296,6 @@ class TestResourceLimits:
         client.send_data(stream_id, b"body")
         server.receive_data(client.data_to_send())
 
-        server.acknowledge_received_data(4, stream_id)
-        with pytest.raises(ValueError, match="exceeds unacknowledged"):
-            server.acknowledge_received_data(1, stream_id)
+        server.consume_received_data(stream_id, 4)
+        with pytest.raises(ValueError, match="exceeds unconsumed"):
+            server.consume_received_data(stream_id, 1)

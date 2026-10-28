@@ -18,8 +18,8 @@ from ngh2 import (
     Role,
     Setting,
     StreamClosed,
-    StreamProtocolError,
     StreamReset,
+    StreamStateError,
     StreamUnavailableError,
     TrailersReceived,
     WindowUpdated,
@@ -221,10 +221,10 @@ def test_reset_after_end_stream_requires_an_ended_local_direction(
     server.receive_data(client.data_to_send())
     server.events()
 
-    with pytest.raises(StreamProtocolError):
+    with pytest.raises(StreamStateError):
         server.reset_stream(stream_id, after_end_stream=True)
     server.send_response(stream_id, [(b":status", b"200")])
-    with pytest.raises(StreamProtocolError):
+    with pytest.raises(StreamStateError):
         server.reset_stream(stream_id, after_end_stream=True)
     with pytest.raises(StreamUnavailableError):
         server.reset_stream(stream_id + 2, after_end_stream=True)
@@ -301,7 +301,7 @@ def test_manual_consumption_emits_connection_and_stream_window_updates(
         len(event.data) for event in server.events() if isinstance(event, DataReceived)
     )
 
-    server.acknowledge_received_data(consumed, stream_id)
+    server.consume_received_data(stream_id, consumed)
     client.receive_data(server.data_to_send())
 
     updates = [event for event in client.events() if isinstance(event, WindowUpdated)]
@@ -334,7 +334,7 @@ def test_manual_consumption_after_stream_close_updates_connection_window(
         for event in server.events()
     )
 
-    server.acknowledge_received_data(consumed, stream_id)
+    server.consume_received_data(stream_id, consumed)
     client.receive_data(server.data_to_send())
 
     updates = [event for event in client.events() if isinstance(event, WindowUpdated)]
@@ -346,7 +346,7 @@ def test_manual_consumption_requires_manual_window_updates() -> None:
     server.initiate_connection()
 
     with pytest.raises(ConnectionStateError, match="auto_window_update=False"):
-        server.acknowledge_received_data(0, 1)
+        server.consume_received_data(1, 0)
 
 
 def test_manual_consumption_excludes_padding_already_consumed_by_engine(
@@ -373,9 +373,9 @@ def test_manual_consumption_excludes_padding_already_consumed_by_engine(
     event = next(event for event in server.events() if isinstance(event, DataReceived))
 
     assert event.data == b"x"
-    server.acknowledge_received_data(len(event.data), stream_id)
-    with pytest.raises(ValueError, match="exceeds unacknowledged"):
-        server.acknowledge_received_data(1, stream_id)
+    server.consume_received_data(stream_id, len(event.data))
+    with pytest.raises(ValueError, match="exceeds unconsumed"):
+        server.consume_received_data(stream_id, 1)
 
 
 def test_shutdown_notice_stops_new_requests(
@@ -454,7 +454,7 @@ def test_terminate_connection_stops_both_session_directions(
     )
     assert server.queued_body_size() == 0
     with pytest.raises(ConnectionStateError):
-        server.ping()
+        server.send_ping()
 
     final_output = server.data_to_send()
     closed = next(
@@ -551,7 +551,7 @@ def test_terminal_protocol_error_discards_a_queued_ping(
 ) -> None:
     client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
     handshake(client, server)
-    server.ping(b"pending!")
+    server.send_ping(b"pending!")
     settings_on_stream_one = b"\x00\x00\x00\x04\x00\x00\x00\x00\x01"
 
     server.receive_data(settings_on_stream_one)

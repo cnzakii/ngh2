@@ -61,9 +61,9 @@ or the stream has been reset.
 stream, or forward each `event.data` using `event.stream_id`. The example joins
 the chunks only because the payload is small.
 
-With manual receive-window updates, call `acknowledge_received_data()` with
-`amount=len(event.data)` and `stream_id=event.stream_id` only after the
-downstream consumer has accepted that chunk.
+With manual receive-window updates, call `consume_received_data()` with
+`event.stream_id` and `len(event.data)` only after the downstream consumer has
+accepted that chunk.
 
 ## Distinguish informational and final responses
 

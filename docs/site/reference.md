@@ -11,10 +11,9 @@ Methods queue protocol operations only. `data_to_send()` returns bytes for the
 caller-owned transport, while `receive_data()` accepts bytes already read by
 that transport.
 
-All public inputs documented as `bytes` accept subclasses, including enums
-derived from `bytes`. This also applies to event constructors. Protocol
-operations use the underlying byte contents and lengths; overriding `__len__`,
-`__bool__`, or `__bytes__` does not change the bytes sent.
+Inputs documented as `bytes`, including event constructor arguments, also
+accept `bytes` subclasses such as byte-valued enums; ngh2 uses their underlying
+contents.
 
 | If you need to… | Start with |
 | --- | --- |
@@ -22,7 +21,7 @@ operations use the underlying byte contents and lengths; overriding `__len__`,
 | send an HTTP message | `send_request()`, `send_response()`, `send_data()`, `send_trailers()` |
 | react to peer activity | the event classes under **Events** |
 | bound outbound body input | `queued_body_size()` and the [flow-control guide](guides/flow-control.md) |
-| manage inbound flow control | `acknowledge_received_data()` and `set_local_window_size()` |
+| manage inbound flow control | `consume_received_data()` and `set_local_window_size()` |
 | shut down | `send_shutdown_notice()`, `send_goaway()`, `terminate_connection()` |
 | use optional protocol controls | the [Advanced HTTP/2 guides](advanced.md) |
 | tune limits | `Configuration` |

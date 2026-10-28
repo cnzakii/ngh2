@@ -36,6 +36,7 @@ from .exceptions import (
     ProtocolError,
     PushDisabledError,
     StreamProtocolError,
+    StreamStateError,
     StreamUnavailableError,
 )
 from .types import Header, NeverIndexedHeader, Priority
@@ -76,6 +77,7 @@ __all__ = [
     "StreamClosed",
     "StreamProtocolError",
     "StreamReset",
+    "StreamStateError",
     "StreamUnavailableError",
     "TrailersReceived",
     "WindowUpdated",

@@ -37,14 +37,14 @@ def main() -> None:
         f"read={client.want_read} write={client.want_write}"
     )
     print(
-        f"connection windows local={client.local_window_size} "
-        f"remote={client.remote_window_size}"
+        f"connection windows local={client.local_window_size()} "
+        f"remote={client.remote_window_size()}"
     )
 
     # SETTINGS updates take effect for the peer when received and for the
     # sender's local_settings snapshot when acknowledged.
     client.update_settings({ngh2.Setting.MAX_FRAME_SIZE: 32_768})
-    client.ping(b"health01")
+    client.send_ping(b"health01")
     transfer(client, server)
 
     received = server.events()

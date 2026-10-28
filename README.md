@@ -17,69 +17,103 @@
   <a href="https://github.com/cnzakii/ngh2/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-Build HTTP/2 clients, servers, proxies, and protocol tools with control over
-your transport and runtime. Feed incoming bytes to a `Connection`, handle
-protocol events, and write the outgoing bytes it produces.
-
-Protocol processing is synchronous. Your application decides when to read,
-write, and schedule work; ngh2 manages HTTP/2 connection and stream state.
+Build HTTP/2 clients, servers, proxies, and protocol tools on the transport
+and runtime you already use. ngh2 turns received bytes into events and your
+calls into bytes to send; your code decides how and when those bytes move.
 
 > ngh2 is currently alpha software. Its public API may change before the first
 > stable release.
 
 ## Why ngh2
 
-- **Message and event API.** Submit requests, responses, bodies, and trailers;
-  handle connection and stream events as Python objects.
-- **Measured protocol speed.** The checked public-API workloads deliver roughly
-  20–30× the throughput of [h2](https://h2.readthedocs.io/); see the
-  [measurements](#performance).
-- **Native protocol engine.**
-  [libnghttp2](https://nghttp2.org/documentation/) handles framing, HPACK,
-  flow control, scheduling, and protocol validation.
+- **Fast.** ngh2 completes HTTP/2 exchanges at least 20× faster than the
+  pure-Python [h2](https://h2.readthedocs.io/) in every
+  [measured scenario](#performance).
+- **Proven protocol engine.** Framing, HPACK, flow control, and protocol
+  validation come from [libnghttp2](https://nghttp2.org/documentation/), the
+  HTTP/2 implementation behind curl, Node.js, and Apache httpd. CI also runs
+  the [h2spec](https://github.com/summerwind/h2spec) conformance suite.
+- **Fits any runtime.** ngh2 never opens sockets or starts an event loop, so
+  the same code works with asyncio, threads, Trio, or in-memory tests.
 
-## Get started
+## Quick look
 
-Install ngh2:
+A client and a server exchange one request in memory. A real program writes
+`data_to_send()` to its socket and passes the bytes it reads to
+`receive_data()`.
+
+```python
+import ngh2
+
+client = ngh2.Connection(ngh2.Role.CLIENT)
+server = ngh2.Connection(ngh2.Role.SERVER)
+client.initiate_connection()
+server.initiate_connection()
+
+client.send_request(
+    [
+        (b":method", b"GET"),
+        (b":scheme", b"https"),
+        (b":authority", b"example.test"),
+        (b":path", b"/"),
+    ],
+    end_stream=True,
+)
+server.receive_data(client.data_to_send())
+
+for event in server.events():
+    if isinstance(event, ngh2.RequestReceived):
+        server.send_response(event.stream_id, [(b":status", b"200")])
+        server.send_data(event.stream_id, b"hello", end_stream=True)
+client.receive_data(server.data_to_send())
+
+for event in client.events():
+    print(event)
+```
+
+```text
+SettingsReceived(settings=mappingproxy({}))
+SettingsAcknowledged()
+ResponseReceived(stream_id=1, headers=((b':status', b'200'),), end_stream=False)
+DataReceived(stream_id=1, data=b'hello', end_stream=True)
+StreamClosed(stream_id=1, error_code=<ErrorCode.NO_ERROR: 0>, local_error=None)
+```
+
+## Installation
 
 ```console
 python -m pip install ngh2
 ```
 
-Supported interpreters are CPython 3.10 through 3.15, including free-threaded
-CPython 3.14t and 3.15t.
+Or add it to a [uv](https://docs.astral.sh/uv/) project:
 
-Wheels bundle libnghttp2 for Linux, macOS, and Windows. Linux wheels support
-both glibc (manylinux) and musl (musllinux, including Alpine).
+```console
+uv add ngh2
+```
 
-Start with the
-[first-exchange tutorial](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/).
-It runs a complete client/server exchange in memory and explains how to
-initialize connections, send messages, and handle events. The
-[example source](https://github.com/cnzakii/ngh2/blob/main/examples/python/first_round_trip.py)
-is also available to run directly.
+ngh2 supports CPython 3.10 through 3.15, including free-threaded 3.14t and
+3.15t. Wheels bundle libnghttp2 for Linux (glibc and musl), macOS, and
+Windows, so no system library is needed.
 
-## How it fits
+## What ngh2 handles
 
-Each `Connection` manages one HTTP/2 connection and its multiplexed streams.
-It supports client and server roles, request and response bodies, informational
-responses, trailers, flow control, stream cancellation, and connection shutdown.
+Each `Connection` manages one HTTP/2 connection and its multiplexed streams,
+in the client or server role: request and response bodies, informational
+responses, trailers, flow control, stream cancellation, and graceful shutdown.
 
-Your application owns sockets, TLS and ALPN, transport buffering, connection
-pooling, routing, retries, and timeouts. The same protocol API can be used with
-blocking or asynchronous transports.
-
-Drive each `Connection` from one thread or task at a time. Independent
+Your application owns sockets, TLS and ALPN, buffering, connection pooling,
+routing, retries, and timeouts. Calls are synchronous and never block on I/O.
+Drive each `Connection` from one thread or task at a time; separate
 connections can run concurrently.
 
 ## Documentation
 
-- [Tutorials](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/):
-  exchange messages, multiplex streams, and manage message lifecycles.
+- [First exchange](https://ngh2.readthedocs.io/en/stable/learn/first-exchange/):
+  start here. The tutorials go on to multiplexing and message lifecycles.
 - [Integration guides](https://ngh2.readthedocs.io/en/stable/guides/transport/):
-  connect asyncio transports, manage flow control, and handle shutdown.
+  connect asyncio transports, manage flow control, and shut down cleanly.
 - [Advanced HTTP/2](https://ngh2.readthedocs.io/en/stable/advanced/):
-  configure settings, priority, server push, and protocol extensions.
+  settings, priority, server push, and protocol extensions.
 - [Python API](https://ngh2.readthedocs.io/en/stable/reference/):
   methods, accepted inputs, event fields, and exceptions.
 - [Runnable examples](https://github.com/cnzakii/ngh2/tree/main/examples):
@@ -87,24 +121,24 @@ connections can run concurrently.
 
 ## Performance
 
-The checked `pyperf` run compares complete exchanges through the public APIs of
-ngh2 and hyper-h2. It includes stream state transitions, HPACK, flow-control
-accounting, event construction, and frame serialization. Connections and HPACK
-state are reused across exchanges; the initial handshake is outside the timer.
+Each scenario runs complete exchanges through the public APIs of ngh2 and h2,
+measured with `pyperf`. The timer covers stream state, HPACK, flow-control
+accounting, event construction, and frame serialization; connections are set
+up once outside it.
 
 | Scenario | ngh2 (µs/exchange) | h2 4.4.1 (µs/exchange) | Relative throughput |
 | --- | ---: | ---: | ---: |
-| Small request/204 round trip | 2.19 | 58.13 | 26.5× |
-| Header block · 32 fields | 4.67 | 130.51 | 28.0× |
-| Fragmented request · 5 B | 2.58 | 61.92 | 24.0× |
-| Request body · 32 KiB | 6.27 | 116.71 | 18.6× |
-| Multiplexed batch · 100 streams | 1.52 | 47.43 | 31.1× |
+| Small request/204 round trip | 2.01 | 62.36 | 31.0× |
+| Header block · 32 fields | 4.33 | 149.18 | 34.5× |
+| Fragmented request · 5 B | 2.37 | 68.95 | 29.1× |
+| Request body · 32 KiB | 5.92 | 120.97 | 20.4× |
+| Multiplexed batch · 100 streams | 1.36 | 48.82 | 36.0× |
 
-_Environment: ngh2 0.3.0 (4a04d5f) · h2 4.4.1 · CPython 3.12.13 (64-bit) · Apple M4 · macOS-27.0.1-arm64-arm-64bit · 2026-10-20_
+_Environment: ngh2 0.3.0 (0383356) · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-10-28_
 
-These are protocol-layer measurements, not end-to-end client or server
-benchmarks. They exclude sockets, TLS, event-loop scheduling, and application
-work. Results on other systems and workloads will vary.
+These are protocol-layer measurements. They exclude sockets, TLS, event-loop
+scheduling, and application work, so end-to-end gains depend on how much of
+your program's time HTTP/2 processing takes.
 
 Inspect the [benchmark source][benchmark-script] and
 [raw result][benchmark-results], or follow the

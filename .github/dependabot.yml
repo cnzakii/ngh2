@@ -5,8 +5,15 @@ updates:
     versioning-strategy: lockfile-only
     schedule:
       interval: monthly
+    # One monthly PR for development tools; security updates stay separate.
+    groups:
+      development:
+        patterns: ["*"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

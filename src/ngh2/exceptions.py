@@ -3,39 +3,43 @@ class NGH2Error(Exception):
 
 
 class ConnectionStateError(NGH2Error):
-    """Raised when an operation is invalid in the connection's current state."""
+    """Raised when a call is invalid for the connection's role or state."""
+
+
+class ConnectionClosingError(ConnectionStateError):
+    """Raised when connection shutdown prevents a new operation."""
+
+
+class NoAvailableStreamIDError(ConnectionStateError):
+    """Raised when no local stream identifier remains available."""
+
+
+class StreamStateError(NGH2Error):
+    """Raised when a call is invalid for one stream's current state."""
+
+
+class StreamUnavailableError(StreamStateError):
+    """Raised when an operation cannot use the requested stream."""
+
+
+class PushDisabledError(StreamStateError):
+    """Raised when the peer does not permit server push."""
 
 
 class ProtocolError(NGH2Error):
-    """Base class for HTTP/2 protocol errors."""
+    """Base class for violations of HTTP/2 protocol rules."""
 
 
 class ConnectionProtocolError(ProtocolError):
-    """Raised when an error affects the entire connection."""
+    """Raised when a protocol violation affects the entire connection."""
 
 
 class StreamProtocolError(ProtocolError):
-    """Raised when an error affects one stream."""
+    """Raised when a protocol violation affects one stream."""
 
 
 class DenialOfServiceError(ConnectionProtocolError):
     """Raised when peer input exceeds a configured resource limit."""
-
-
-class StreamUnavailableError(StreamProtocolError):
-    """Raised when an operation cannot use the requested stream."""
-
-
-class PushDisabledError(StreamProtocolError):
-    """Raised when the peer does not permit server push."""
-
-
-class ConnectionClosingError(NGH2Error):
-    """Raised when connection shutdown prevents a new operation."""
-
-
-class NoAvailableStreamIDError(NGH2Error):
-    """Raised when no local stream identifier remains available."""
 
 
 class InternalError(NGH2Error):

@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - ".github/workflows/release.yml"
+      - "CMakeLists.txt"
       - "pyproject.toml"
       - "src/ngh2/_version.py"
+      - "vendor/nghttp2"
   push:
     tags: ["v*"]
 

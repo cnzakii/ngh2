@@ -9,11 +9,44 @@ User-visible changes to ngh2 are recorded here.
 - `reset_stream(..., after_end_stream=True)` sends the stream's queued
   headers, body bytes, and trailers before RST_STREAM, so a server can stop
   an unneeded request body with `NO_ERROR` after a complete response.
+- `StreamStateError`, raised when a call does not fit one stream's current
+  state, such as sending body bytes after the stream ended.
 
 ### Changed
 
+- **Breaking:** `acknowledge_received_data(amount, stream_id)` is now
+  `consume_received_data(stream_id, amount)`. The stream comes first, like
+  every other stream method, and the name no longer suggests an HTTP/2 ACK.
+- **Breaking:** Local misuse no longer raises protocol errors. Calling a
+  method from the wrong role raises `ConnectionStateError` instead of
+  `ConnectionProtocolError`, and invalid stream operations raise
+  `StreamStateError` instead of `StreamProtocolError`.
+  `StreamUnavailableError` and `PushDisabledError` now derive from
+  `StreamStateError`; `ConnectionClosingError` and `NoAvailableStreamIDError`
+  derive from `ConnectionStateError`. Protocol errors are reserved for HTTP/2
+  rule violations.
+- **Breaking:** `remote_window_size` and `local_window_size` are methods that
+  take an optional `stream_id`, with `0` selecting the connection. They
+  replace the properties of the same names and `stream_remote_window_size()`
+  and `stream_local_window_size()`.
+- **Breaking:** `ping()` is now `send_ping()`, matching the other frame
+  methods.
+- **Breaking:** `Configuration.peer_max_concurrent_streams` is now
+  `initial_peer_max_concurrent_streams`, since it applies only until the
+  peer's first SETTINGS frame.
+- Event `error_code` fields report known codes as `ErrorCode` members, and
+  `SettingsReceived.settings`, `local_settings`, and `remote_settings` key
+  known identifiers by `Setting` members. Unknown values remain integers.
+- `reset_stream()`, `send_goaway()`, and `terminate_connection()` show their
+  defaults as `ErrorCode` members.
 - `reset_stream()` and `terminate_connection()` document that they discard
   frames still queued for the affected streams.
+- Lower per-call overhead for integer arguments, role checks, header
+  submission, body queues, output staging, and received response headers. A
+  small request/response exchange with trailers and manual flow control uses
+  about 13% less CPU.
+- `data_to_send(amount)` copies body bytes once when a whole DATA frame fits
+  the requested amount, as it already did without a limit.
 
 ### Fixed
 
