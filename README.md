@@ -28,7 +28,7 @@ calls into bytes to send; your code decides how and when those bytes move.
 
 - **Fast.** ngh2 completes HTTP/2 exchanges at least 20× faster than the
   pure-Python [h2](https://h2.readthedocs.io/) in every
-  [measured scenario](#performance).
+  [measured scenario](https://github.com/cnzakii/ngh2#performance).
 - **Proven protocol engine.** Framing, HPACK, flow control, and protocol
   validation come from [libnghttp2](https://nghttp2.org/documentation/), the
   HTTP/2 implementation behind curl, Node.js, and Apache httpd. CI also runs
@@ -144,7 +144,7 @@ your program's time HTTP/2 processing takes.
 
 Inspect the [benchmark source][benchmark-script] and
 [raw result][benchmark-results], or follow the
-[reproduction steps](CONTRIBUTING.md#performance-measurements).
+[reproduction steps](https://github.com/cnzakii/ngh2/blob/main/CONTRIBUTING.md#performance-measurements).
 
 ## Contributing
 
