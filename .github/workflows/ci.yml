@@ -66,7 +66,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - run: uv sync --locked
       - run: uv run --locked pre-commit run --all-files
       - name: Keep Read the Docs on the development Python version
@@ -88,7 +88,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - run: uv run --locked --no-dev --group docs python docs/griffe_runtime_docstrings.py
       - run: uv run --locked --no-dev --group docs zensical build --strict
 
@@ -119,7 +119,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --locked --no-dev --group test
@@ -176,7 +176,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Build the instrumented extension
         run: >-
           uv --no-cache sync --locked --no-dev --group test
@@ -203,7 +203,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - run: uv sync --locked --no-dev --group test
       - name: Install h2spec 2.6.0
         run: |
@@ -228,7 +228,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Build sdist and rebuild its wheel
         run: |
           uv build --sdist
@@ -259,7 +259,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Build the traced extension
         run: >-
           uv --no-cache sync --locked --no-dev --group test --group coverage
