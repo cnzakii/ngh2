@@ -142,4 +142,5 @@ jobs:
             'index($0, heading) == 1 { found = 1; next } found && /^## \[/ { exit } found' \
             CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"
-          gh release create "$RELEASE_TAG" --verify-tag --notes-file "$RUNNER_TEMP/notes.md"
+          gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" --generate-notes
