@@ -232,7 +232,7 @@ def test_byte_parameters_reject_non_bytes(operation: str, invalid: object) -> No
         elif operation == "alt-svc-origin":
             connection.send_alt_svc(b'h3=":443"', origin=value)
         elif operation == "ping":
-            connection.ping(value)
+            connection.send_ping(value)
         elif operation == "goaway":
             connection.send_goaway(debug_data=value)
         elif operation == "upgrade":
@@ -285,3 +285,38 @@ def test_fragmented_headers_and_data_preserve_events(fragment_size: int) -> None
     assert request.headers == tuple(large_headers)
     assert data.data == b"payload"
     assert data.end_stream
+
+
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+@pytest.mark.parametrize(
+    ("invoke", "message"),
+    [
+        (lambda c, v: c.send_data(v, b""), "stream_id is out of range"),
+        (lambda c, v: c.reset_stream(1, v), "error_code is out of range"),
+        (lambda c, v: c.send_goaway(last_stream_id=v), "last_stream_id is out of"),
+        (lambda c, v: c.local_window_size(v), "stream_id is out of range"),
+    ],
+    ids=["stream-id", "uint32", "uint31", "window-stream"],
+)
+def test_integers_beyond_64_bits_are_out_of_range(
+    invoke: Callable[[Connection, int], object],
+    message: str,
+    sign: int,
+) -> None:
+    connection = Connection(Role.CLIENT)
+    connection.initiate_connection()
+
+    with pytest.raises(ValueError, match=message):
+        invoke(connection, sign << 70)
+
+
+@pytest.mark.parametrize(
+    ("amount", "message"),
+    [(1 << 70, "too large"), (-(1 << 70), "non-negative"), (-1, "non-negative")],
+)
+def test_size_arguments_beyond_64_bits_are_rejected(amount: int, message: str) -> None:
+    connection = Connection(Role.CLIENT)
+    connection.initiate_connection()
+
+    with pytest.raises(ValueError, match=message):
+        connection.data_to_send(amount)

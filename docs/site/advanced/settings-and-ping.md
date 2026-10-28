@@ -57,7 +57,7 @@ caller-owned transport.
 
 ## Give PING a caller-owned purpose
 
-`ping()` accepts exactly eight opaque bytes. The peer acknowledgement is
+`send_ping()` accepts exactly eight opaque bytes. The peer acknowledgement is
 automatic, and `PingAcknowledged` returns the echoed payload.
 
 Use that payload to match a timer or health probe. ngh2 does not own clocks,
@@ -72,8 +72,8 @@ timeouts, or the decision to close an unresponsive connection.
 | `next_stream_id` | the next locally initiated ID | reserve that ID; use the ID returned by `send_request()` or `send_push_promise()` |
 | `can_send_request` | whether a client may currently create a request | guarantee a later call after GOAWAY; still handle `ConnectionClosingError` |
 | `queued_body_size()` | body payload still waiting in ngh2's outbound queue | report framing, transport, or delivery progress; see [flow control and backpressure](../guides/flow-control.md) |
-| `remote_window_size`, `stream_remote_window_size()` | peer capacity for outbound DATA | reserve capacity for a producer or replace its queue policy |
-| `local_window_size`, `stream_local_window_size()` | remaining inbound DATA capacity | show downstream application queue capacity |
+| `remote_window_size()` | peer capacity for outbound DATA | reserve capacity for a producer or replace its queue policy |
+| `local_window_size()` | remaining inbound DATA capacity | show downstream application queue capacity |
 | `local_settings`, `remote_settings` | acknowledged local and effective peer settings | describe application policy |
 
 Stream window queries require a stream still tracked by the state machine and

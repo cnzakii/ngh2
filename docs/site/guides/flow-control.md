@@ -96,7 +96,7 @@ The server is configured with `auto_window_update=False`. For each
 then releases exactly `len(event.data)` bytes:
 
 ```python
-server.acknowledge_received_data(amount=len(event.data), stream_id=event.stream_id)
+server.consume_received_data(event.stream_id, len(event.data))
 ```
 
 Frame padding is accounted for internally. Do not add it to the acknowledged
@@ -124,7 +124,7 @@ Increasing a target queues WINDOW_UPDATE as needed. Reducing one can take
 effect gradually while already received DATA drains.
 
 This method does not say that application data was consumed. In manual mode,
-continue to call `acknowledge_received_data()` only after the downstream
+continue to call `consume_received_data()` only after the downstream
 consumer accepts each `DataReceived` payload.
 
 ## Keep reading while a sender is blocked

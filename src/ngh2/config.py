@@ -25,9 +25,9 @@ class Configuration:
         auto_window_update: Whether to generate receive-side WINDOW_UPDATE
             frames automatically. Disable this when consumption is tracked by
             the application.
-        peer_max_concurrent_streams: Maximum concurrent streams assumed until
-            the peer's first SETTINGS frame arrives. Must fit an unsigned
-            32-bit integer.
+        initial_peer_max_concurrent_streams: Maximum concurrent streams
+            assumed until the peer's first SETTINGS frame arrives. Must fit an
+            unsigned 32-bit integer.
         max_reserved_remote_streams: Maximum remotely reserved streams retained
             by a client connection. Must fit an unsigned 32-bit integer.
         max_send_header_block_length: Maximum outbound header block length as
@@ -53,7 +53,7 @@ class Configuration:
     """
 
     auto_window_update: bool = True
-    peer_max_concurrent_streams: int = 100
+    initial_peer_max_concurrent_streams: int = 100
     max_reserved_remote_streams: int = 200
     max_send_header_block_length: int = 65_536
     max_deflate_dynamic_table_size: int = 4_096

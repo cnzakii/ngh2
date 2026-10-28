@@ -19,9 +19,10 @@ cd ngh2
 uv sync --locked
 ```
 
-The default development interpreter is Python 3.12. Continuous integration
+`.python-version` sets the development interpreter. Continuous integration
 also tests supported CPython 3.10 through 3.15, free-threaded CPython 3.14t and
-3.15t, and native builds on Linux (glibc and musl), macOS, and Windows.
+3.15t, and native builds on Linux (glibc and musl), macOS, and Windows, and
+runs the test suite under AddressSanitizer and UBSan.
 
 Enable the repository's pre-commit checks once after cloning:
 

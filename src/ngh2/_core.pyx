@@ -17,16 +17,17 @@ from cpython.bytes cimport (
     PyBytes_FromStringAndSize,
     PyBytes_GET_SIZE,
 )
-from collections import deque
+from cpython.long cimport PyLong_AsLongLongAndOverflow
+from cpython.number cimport PyNumber_Index as integer_index
 from libc.stdint cimport int32_t, uint8_t, uint32_t, uint64_t
 from libc.stdlib cimport free, malloc
 from libc.string cimport memcpy, memset
-from operator import index as integer_index
 from os import urandom
 
 from . cimport _nghttp2
 
 from .config import Configuration, Role
+from .enums import ErrorCode, Setting
 from .events import (
     AltSvcReceived,
     ConnectionClosed,
@@ -57,6 +58,7 @@ from .exceptions import (
     NoAvailableStreamIDError,
     PushDisabledError,
     StreamProtocolError,
+    StreamStateError,
     StreamUnavailableError,
 )
 from .types import NeverIndexedHeader, Priority
@@ -107,7 +109,8 @@ def pack_settings_payload(settings):
 
 
 cdef class _BodySource:
-    cdef object chunks
+    cdef list chunks
+    cdef Py_ssize_t head
     cdef Py_ssize_t offset
     cdef size_t queued_size
     cdef bint ended
@@ -115,7 +118,8 @@ cdef class _BodySource:
     cdef object trailers
 
     def __cinit__(self):
-        self.chunks = deque()
+        self.chunks = []
+        self.head = 0
         self.offset = 0
         self.queued_size = 0
         self.ended = False
@@ -145,8 +149,10 @@ cdef class Connection:
 
     cdef readonly object role
     cdef readonly object config
+    cdef bint _server
     cdef _nghttp2.nghttp2_session *_session
     cdef bytearray _output
+    cdef Py_ssize_t _output_size
     cdef Py_ssize_t _output_remaining
     cdef object _callback_error
     cdef bint _initialized
@@ -169,7 +175,7 @@ cdef class Connection:
     cdef size_t _current_header_size
     cdef dict _data_chunks
     cdef set _responses
-    cdef dict _unacknowledged
+    cdef dict _unconsumed
     cdef dict _local_stream_errors
     cdef dict _deferred_resets
 
@@ -194,7 +200,7 @@ cdef class Connection:
         self._current_header_size = 0
         self._data_chunks = {}
         self._responses = set()
-        self._unacknowledged = {}
+        self._unconsumed = {}
         self._local_stream_errors = {}
         self._deferred_resets = {}
 
@@ -239,6 +245,7 @@ cdef class Connection:
             _nghttp2.nghttp2_session_callbacks_del(callbacks)
 
         self.role = role
+        self._server = role is Role.SERVER
         self.config = config
         self._session = session
         self._initialized = True
@@ -308,17 +315,17 @@ cdef class Connection:
         cdef const uint8_t *pointer = NULL
         cdef int result
 
-        if self.role is Role.CLIENT and local_settings is not None:
+        if not self._server and local_settings is not None:
             raise ValueError("client upgrade does not accept local_settings")
         if not PyBytes_Check(settings_payload):
             raise TypeError("settings_payload must be bytes")
         if PyBytes_GET_SIZE(settings_payload):
             pointer = <const uint8_t *>PyBytes_AS_STRING(settings_payload)
 
-        if self.role is Role.SERVER:
+        if self._server:
             entries = _normalize_settings(local_settings)
         self._require_created()
-        if self.role is Role.SERVER:
+        if self._server:
             if <size_t>len(entries) > self._max_settings:
                 raise ValueError("settings exceed the configured entry limit")
             count = len(entries)
@@ -336,7 +343,7 @@ cdef class Connection:
             free(native_entries)
             raise
 
-        if self.role is Role.SERVER:
+        if self._server:
             try:
                 result = _nghttp2.nghttp2_submit_settings(
                     self._session,
@@ -438,6 +445,7 @@ cdef class Connection:
             return b""
 
         self._output = bytearray()
+        self._output_size = 0
         self._output_remaining = limit
         self._callback_error = None
         try:
@@ -445,7 +453,9 @@ cdef class Connection:
             self._raise_callback_or_native(result)
             if self._closing:
                 self._update_terminal_state()
-            output = bytes(self._output)
+            output = PyBytes_FromStringAndSize(
+                PyByteArray_AS_STRING(self._output), self._output_size,
+            )
         except BaseException:
             # Native output has advanced; lost bytes cannot be regenerated.
             self._fail()
@@ -467,8 +477,7 @@ cdef class Connection:
             The stream identifier allocated by the HTTP/2 state machine.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a server.
+            ConnectionStateError: If the connection is not active or is a server.
             ConnectionClosingError: If a new request cannot be created.
             NoAvailableStreamIDError: If stream identifiers are exhausted.
             TypeError: If headers or ``end_stream`` have invalid types.
@@ -489,8 +498,8 @@ cdef class Connection:
             provider_pointer = &provider
         try:
             self._require_active()
-            if self.role is not Role.CLIENT:
-                raise ConnectionProtocolError("a server cannot send requests")
+            if self._server:
+                raise ConnectionStateError("a server cannot send requests")
             if not _nghttp2.nghttp2_session_check_request_allowed(self._session):
                 raise ConnectionClosingError(
                     "the connection cannot create another request stream",
@@ -518,9 +527,8 @@ cdef class Connection:
             end_stream: Whether the response has no body or trailers.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a client.
-            StreamProtocolError: If a final response is already pending.
+            ConnectionStateError: If the connection is not active or is a client.
+            StreamStateError: If a final response is already pending.
             StreamUnavailableError: If the stream cannot accept a response.
             TypeError: If headers, ``stream_id``, or ``end_stream`` are invalid.
         """
@@ -541,11 +549,11 @@ cdef class Connection:
             provider_pointer = &provider
         try:
             self._require_active()
-            if self.role is not Role.SERVER:
-                raise ConnectionProtocolError("a client cannot send responses")
+            if not self._server:
+                raise ConnectionStateError("a client cannot send responses")
             self._require_stream(stream_id)
             if stream_id in self._responses:
-                raise StreamProtocolError("a response is already pending")
+                raise StreamStateError("a response is already pending")
             result = _nghttp2.nghttp2_submit_response2(
                 self._session, stream_id, native_headers, count,
                 provider_pointer,
@@ -568,9 +576,8 @@ cdef class Connection:
                 otherwise RFC 9113-compliant fields.
 
         Raises:
-            ConnectionProtocolError: If called on a client.
-            ConnectionStateError: If the connection is not active.
-            StreamProtocolError: If a final response is already pending.
+            ConnectionStateError: If the connection is not active or is a client.
+            StreamStateError: If a final response is already pending.
             StreamUnavailableError: If the stream no longer exists.
             TypeError: If headers or ``stream_id`` are invalid.
         """
@@ -585,13 +592,13 @@ cdef class Connection:
         native_headers = _make_headers(fields, count)
         try:
             self._require_active()
-            if self.role is not Role.SERVER:
-                raise ConnectionProtocolError(
+            if not self._server:
+                raise ConnectionStateError(
                     "a client cannot send informational responses",
                 )
             self._require_stream(stream_id)
             if stream_id in self._responses:
-                raise StreamProtocolError(
+                raise StreamStateError(
                     "informational responses must precede the final response",
                 )
             result = _nghttp2.nghttp2_submit_headers(
@@ -614,7 +621,7 @@ cdef class Connection:
 
         Raises:
             ConnectionStateError: If the connection is not active.
-            StreamProtocolError: If the stream has no open body or was ended.
+            StreamStateError: If the stream has no open body or was ended.
             TypeError: If headers or ``stream_id`` are invalid.
         """
         cdef _BodySource body
@@ -626,9 +633,9 @@ cdef class Connection:
         self._require_active()
         body = self._bodies.get(stream_id)
         if body is None:
-            raise StreamProtocolError("stream has no open body")
+            raise StreamStateError("stream has no open body")
         if body.ended:
-            raise StreamProtocolError("stream body is already ended")
+            raise StreamStateError("stream body is already ended")
         body.trailers = normalized
         body.ended = True
         if body.deferred:
@@ -649,8 +656,7 @@ cdef class Connection:
             The reserved promised stream identifier.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a client.
+            ConnectionStateError: If the connection is not active or is a client.
             StreamUnavailableError: If the associated stream is unavailable.
             TypeError: If headers or ``stream_id`` are invalid.
         """
@@ -665,8 +671,8 @@ cdef class Connection:
         native_headers = _make_headers(fields, count)
         try:
             self._require_active()
-            if self.role is not Role.SERVER:
-                raise ConnectionProtocolError("a client cannot send push promises")
+            if not self._server:
+                raise ConnectionStateError("a client cannot send push promises")
             self._require_stream(stream_id)
             promised_stream_id = _nghttp2.nghttp2_submit_push_promise(
                 self._session, _nghttp2.NGHTTP2_FLAG_NONE, stream_id,
@@ -689,7 +695,7 @@ cdef class Connection:
 
         Raises:
             ConnectionStateError: If the connection is not active.
-            StreamProtocolError: If the stream has no open body or already ended.
+            StreamStateError: If the stream has no open body or already ended.
             TypeError: If ``data`` is not bytes-like.
         """
         cdef _BodySource body
@@ -712,9 +718,9 @@ cdef class Connection:
         try:
             body = self._bodies[stream_id]
         except KeyError:
-            raise StreamProtocolError("stream has no open body") from None
+            raise StreamStateError("stream has no open body") from None
         if body.ended:
-            raise StreamProtocolError("stream body is already ended")
+            raise StreamStateError("stream body is already ended")
         if chunk:
             body.chunks.append(chunk)
             body.queued_size += len(chunk)
@@ -734,11 +740,13 @@ cdef class Connection:
 
         Raises:
             ConnectionStateError: If the connection is not active.
-            StreamProtocolError: If the stream has no open body.
+            StreamStateError: If the stream has no open body.
         """
         self.send_data(stream_id, b"", end_stream=True)
 
-    def reset_stream(self, stream_id, error_code=0x08, *, bint after_end_stream=False):
+    def reset_stream(
+        self, stream_id, error_code=ErrorCode.CANCEL, *, bint after_end_stream=False,
+    ):
         """Queue an RST_STREAM frame.
 
         By default the stream stops at once, and headers, body bytes, and
@@ -757,7 +765,7 @@ cdef class Connection:
 
         Raises:
             ConnectionStateError: If the connection is not active.
-            StreamProtocolError: If ``after_end_stream`` is set before the
+            StreamStateError: If ``after_end_stream`` is set before the
                 local direction is ended.
             StreamUnavailableError: If ``after_end_stream`` is set for a
                 stream that is not open.
@@ -782,11 +790,11 @@ cdef class Connection:
                 else:
                     # A server stream without a body ended with its response.
                     ended = (
-                        self.role is Role.CLIENT
+                        not self._server
                         or stream_id in self._responses
                     )
                 if not ended:
-                    raise StreamProtocolError(
+                    raise StreamStateError(
                         "stream local direction is not ended",
                     )
                 # Submitting now would mark the stream closing and drop its
@@ -833,7 +841,7 @@ cdef class Connection:
         if result < 0:
             self._raise_native_error(result)
 
-    def ping(self, opaque_data=_DEFAULT_PING_OPAQUE_DATA):
+    def send_ping(self, opaque_data=_DEFAULT_PING_OPAQUE_DATA):
         """Queue a PING frame with an eight-byte payload.
 
         Args:
@@ -858,7 +866,9 @@ cdef class Connection:
         if result < 0:
             self._raise_native_error(result)
 
-    def send_goaway(self, error_code=0, *, last_stream_id=None, debug_data=b""):
+    def send_goaway(
+        self, error_code=ErrorCode.NO_ERROR, *, last_stream_id=None, debug_data=b"",
+    ):
         """Queue a GOAWAY frame without closing the transport.
 
         Args:
@@ -900,21 +910,22 @@ cdef class Connection:
         """Queue the first GOAWAY in a server graceful-shutdown sequence.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a client.
+            ConnectionStateError: If the connection is not active or is a client.
         """
         cdef int result
 
         self._require_active()
-        if self.role is not Role.SERVER:
-            raise ConnectionProtocolError(
+        if not self._server:
+            raise ConnectionStateError(
                 "a client cannot send shutdown notices",
             )
         result = _nghttp2.nghttp2_submit_shutdown_notice(self._session)
         if result < 0:
             self._raise_native_error(result)
 
-    def terminate_connection(self, error_code=0, *, last_stream_id=None):
+    def terminate_connection(
+        self, error_code=ErrorCode.NO_ERROR, *, last_stream_id=None,
+    ):
         """Queue a final GOAWAY and terminate session processing.
 
         Frames still queued for any stream, including body bytes and
@@ -954,14 +965,14 @@ cdef class Connection:
         self._closing = True
         self._discard_pending_state()
 
-    def acknowledge_received_data(self, amount, stream_id):
+    def consume_received_data(self, stream_id, amount):
         """Release manually consumed application data bytes.
 
         Args:
+            stream_id: Stream that delivered those bytes.
             amount: Application data bytes consumed, normally
                 ``len(event.data)`` for a ``DataReceived`` event. Frame padding
                 is consumed internally.
-            stream_id: Stream that delivered those bytes.
 
         Raises:
             ConnectionStateError: If the connection is not active or automatic
@@ -977,20 +988,22 @@ cdef class Connection:
         self._require_active()
         if self._auto_window_update:
             raise ConnectionStateError(
-                "manual acknowledgement requires auto_window_update=False",
+                "manual consumption requires auto_window_update=False",
             )
         if amount == 0:
             return
-        if amount > self._unacknowledged.get(stream_id, 0):
-            raise ValueError("amount exceeds unacknowledged data")
+        remaining = self._unconsumed.get(stream_id, 0) - amount
+        if remaining < 0:
+            raise ValueError("amount exceeds unconsumed received data")
         result = _nghttp2.nghttp2_session_consume(
             self._session, stream_id, amount,
         )
         if result < 0:
             self._raise_native_error(result)
-        self._unacknowledged[stream_id] -= amount
-        if self._unacknowledged[stream_id] == 0:
-            del self._unacknowledged[stream_id]
+        if remaining:
+            self._unconsumed[stream_id] = remaining
+        else:
+            del self._unconsumed[stream_id]
 
     def set_local_window_size(self, window_size, *, stream_id=0):
         """Set an absolute receive-window target.
@@ -1007,7 +1020,7 @@ cdef class Connection:
             ValueError: If an argument is outside its protocol range.
 
         This changes advertised capacity without marking received application
-        data as consumed. Use ``acknowledge_received_data()`` for consumption
+        data as consumed. Use ``consume_received_data()`` for consumption
         accounting when automatic window updates are disabled.
         """
         cdef int result
@@ -1039,8 +1052,7 @@ cdef class Connection:
             disabled extensible priority.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a server.
+            ConnectionStateError: If the connection is not active or is a server.
             TypeError: If ``field_value`` is not bytes.
             ValueError: If the payload cannot fit in an HTTP/2 frame.
         """
@@ -1048,8 +1060,8 @@ cdef class Connection:
 
         stream_id = _stream_id(stream_id)
         self._require_active()
-        if self.role is not Role.CLIENT:
-            raise ConnectionProtocolError(
+        if self._server:
+            raise ConnectionStateError(
                 "a server cannot send PRIORITY_UPDATE frames",
             )
         if _nghttp2.nghttp2_session_get_remote_settings(self._session, 9) == 0:
@@ -1080,8 +1092,7 @@ cdef class Connection:
             has not been enabled.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a client.
+            ConnectionStateError: If the connection is not active or is a client.
             StreamUnavailableError: If the stream does not exist.
             TypeError: If ``priority`` is not a ``Priority``.
             ValueError: If urgency is negative or does not fit 32 bits.
@@ -1095,8 +1106,8 @@ cdef class Connection:
         native_priority.urgency = _uint32(priority.urgency, "priority.urgency")
         native_priority.inc = priority.incremental
         self._require_active()
-        if self.role is not Role.SERVER:
-            raise ConnectionProtocolError(
+        if not self._server:
+            raise ConnectionStateError(
                 "a client cannot set server scheduling priority",
             )
         if not self._local_extensible_priority:
@@ -1120,16 +1131,15 @@ cdef class Connection:
             Current priority, or ``None`` when extensible priority is disabled.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a client.
+            ConnectionStateError: If the connection is not active or is a client.
             StreamUnavailableError: If the stream does not exist.
         """
         cdef _nghttp2.nghttp2_extpri native_priority
 
         stream_id = _stream_id(stream_id)
         self._require_active()
-        if self.role is not Role.SERVER:
-            raise ConnectionProtocolError(
+        if not self._server:
+            raise ConnectionStateError(
                 "a client cannot query server scheduling priority",
             )
         if not self._local_extensible_priority:
@@ -1152,8 +1162,7 @@ cdef class Connection:
                 bytes including bytes subclasses.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a client.
+            ConnectionStateError: If the connection is not active or is a client.
             TypeError: If byte fields or ``stream_id`` have wrong types.
             ValueError: If origin and stream scope are inconsistent.
         """
@@ -1168,8 +1177,8 @@ cdef class Connection:
         if PyBytes_GET_SIZE(origin):
             origin_pointer = <const uint8_t *>PyBytes_AS_STRING(origin)
         self._require_active()
-        if self.role is not Role.SERVER:
-            raise ConnectionProtocolError("a client cannot send ALTSVC frames")
+        if not self._server:
+            raise ConnectionStateError("a client cannot send ALTSVC frames")
         result = _nghttp2.nghttp2_submit_altsvc(
             self._session, _nghttp2.NGHTTP2_FLAG_NONE, stream_id,
             origin_pointer, PyBytes_GET_SIZE(origin),
@@ -1186,8 +1195,7 @@ cdef class Connection:
             origins: Byte origins advertised by this connection.
 
         Raises:
-            ConnectionStateError: If the connection is not active.
-            ConnectionProtocolError: If called on a client.
+            ConnectionStateError: If the connection is not active or is a client.
             TypeError: If an origin is not bytes.
             ValueError: If the payload cannot fit in an HTTP/2 frame.
         """
@@ -1202,8 +1210,8 @@ cdef class Connection:
                 raise TypeError("each origin must be bytes")
             values.append(value)
         self._require_active()
-        if self.role is not Role.SERVER:
-            raise ConnectionProtocolError("a client cannot send ORIGIN frames")
+        if not self._server:
+            raise ConnectionStateError("a client cannot send ORIGIN frames")
         count = len(values)
         if count:
             native = <_nghttp2.nghttp2_origin_entry *>malloc(
@@ -1300,76 +1308,52 @@ cdef class Connection:
         body = self._bodies.get(stream_id)
         return 0 if body is None else body.queued_size
 
-    @property
-    def remote_window_size(self):
-        """Return the connection-level outbound flow-control window.
-
-        Returns:
-            Bytes the peer currently permits at connection scope.
-
-        Raises:
-            ConnectionStateError: If the connection is not active.
-        """
-        self._require_active()
-        return _nghttp2.nghttp2_session_get_remote_window_size(self._session)
-
-    def stream_remote_window_size(self, stream_id):
-        """Return a stream's outbound flow-control window.
+    def remote_window_size(self, stream_id=0):
+        """Return an outbound flow-control window.
 
         Args:
-            stream_id: Stream to query.
+            stream_id: Stream to query, or ``0`` for the connection.
 
         Returns:
-            Bytes the peer currently permits for the stream.
+            Bytes the peer currently permits at the selected scope.
 
         Raises:
             ConnectionStateError: If the connection is not active.
-            StreamUnavailableError: If the stream does not exist.
+            StreamUnavailableError: If a nonzero stream does not exist.
+            TypeError: If ``stream_id`` is not an integer.
+            ValueError: If ``stream_id`` is outside its wire range.
         """
-        cdef int normalized_stream_id
-
-        normalized_stream_id = _stream_id(stream_id)
+        stream_id = _uint31(stream_id, "stream_id")
         self._require_active()
-        self._require_stream(normalized_stream_id)
-
+        if not stream_id:
+            return _nghttp2.nghttp2_session_get_remote_window_size(self._session)
+        self._require_stream(stream_id)
         return _nghttp2.nghttp2_session_get_stream_remote_window_size(
-            self._session, normalized_stream_id,
+            self._session, stream_id,
         )
 
-    @property
-    def local_window_size(self):
-        """Return the connection-level inbound flow-control window.
-
-        Returns:
-            Bytes this endpoint currently permits at connection scope.
-
-        Raises:
-            ConnectionStateError: If the connection is not active.
-        """
-        self._require_active()
-        return _nghttp2.nghttp2_session_get_local_window_size(self._session)
-
-    def stream_local_window_size(self, stream_id):
-        """Return a stream's inbound flow-control window.
+    def local_window_size(self, stream_id=0):
+        """Return an inbound flow-control window.
 
         Args:
-            stream_id: Stream to query.
+            stream_id: Stream to query, or ``0`` for the connection.
 
         Returns:
-            Bytes this endpoint currently permits for the stream.
+            Bytes this endpoint currently permits at the selected scope.
 
         Raises:
             ConnectionStateError: If the connection is not active.
-            StreamUnavailableError: If the stream does not exist.
+            StreamUnavailableError: If a nonzero stream does not exist.
+            TypeError: If ``stream_id`` is not an integer.
+            ValueError: If ``stream_id`` is outside its wire range.
         """
-        cdef int normalized_stream_id
-
-        normalized_stream_id = _stream_id(stream_id)
+        stream_id = _uint31(stream_id, "stream_id")
         self._require_active()
-        self._require_stream(normalized_stream_id)
-
+        if not stream_id:
+            return _nghttp2.nghttp2_session_get_local_window_size(self._session)
+        self._require_stream(stream_id)
         return _nghttp2.nghttp2_session_get_stream_local_window_size(
-            self._session, normalized_stream_id,
+            self._session, stream_id,
         )
 
     @property
@@ -1481,7 +1465,7 @@ cdef class Connection:
         self._current_header_size = 0
         self._data_chunks.clear()
         self._responses.clear()
-        self._unacknowledged.clear()
+        self._unconsumed.clear()
         self._local_stream_errors.clear()
         self._deferred_resets.clear()
 
@@ -1547,8 +1531,8 @@ cdef void _apply_configuration(
     cdef object glitch_rate_value
     cdef object auto_window_update = config.auto_window_update
     cdef uint32_t peer_max_concurrent_streams = _uint32(
-        config.peer_max_concurrent_streams,
-        "peer_max_concurrent_streams",
+        config.initial_peer_max_concurrent_streams,
+        "initial_peer_max_concurrent_streams",
     )
     cdef uint32_t max_reserved_remote_streams = _uint32(
         config.max_reserved_remote_streams,
@@ -1694,6 +1678,7 @@ cdef _nghttp2.nghttp2_nv *_make_headers(
     cdef _nghttp2.nghttp2_nv *native = NULL
     cdef size_t index
     cdef object header, name, value
+    cdef bint never_indexed
 
     # Cython uses NULL as this function's exception sentinel, so allocate one
     # unused entry for an empty sequence rather than returning an ambiguous NULL.
@@ -1711,11 +1696,16 @@ cdef _nghttp2.nghttp2_nv *_make_headers(
                 raise TypeError("each header must be a pair of bytes") from None
             if not PyBytes_Check(name) or not PyBytes_Check(value):
                 raise TypeError("each header must be a pair of bytes")
+            # isinstance() on a plain tuple falls back to a __class__ lookup.
+            never_indexed = type(header) is NeverIndexedHeader or (
+                type(header) is not tuple
+                and isinstance(header, NeverIndexedHeader)
+            )
             # Custom pairs can yield fresh bytes unrelated to their storage.
             if type(header) is not tuple and type(header) is not NeverIndexedHeader:
                 headers[index] = (
                     NeverIndexedHeader(name, value)
-                    if isinstance(header, NeverIndexedHeader)
+                    if never_indexed
                     else (name, value)
                 )
             native[index].name = <uint8_t *>PyBytes_AS_STRING(name)
@@ -1723,9 +1713,7 @@ cdef _nghttp2.nghttp2_nv *_make_headers(
             native[index].namelen = PyBytes_GET_SIZE(name)
             native[index].valuelen = PyBytes_GET_SIZE(value)
             native[index].flags = (
-                _nghttp2.NGHTTP2_NV_FLAG_NO_INDEX
-                if isinstance(header, NeverIndexedHeader)
-                else 0
+                _nghttp2.NGHTTP2_NV_FLAG_NO_INDEX if never_indexed else 0
             )
     except BaseException:
         free(native)
@@ -1775,26 +1763,31 @@ cdef _nghttp2.nghttp2_settings_entry *_make_settings(list entries) except NULL:
     return native
 
 
-cdef int _stream_id(object value) except -1:
-    """Validate and return a nonzero HTTP/2 stream identifier."""
-    try:
-        value = integer_index(value)
-    except TypeError:
-        raise TypeError("stream_id must be an integer") from None
-    if value <= 0 or value > 0x7FFFFFFF:
-        raise ValueError("stream_id is out of range")
-    return value
-
-
-cdef uint32_t _uint32(object value, str name) except *:
-    """Validate and return an unsigned 32-bit integer."""
+cdef long long _integer(object value, str name, int *overflow) except? -1:
+    """Convert an integer argument in C; ``overflow`` reports its sign past 64 bits."""
     try:
         value = integer_index(value)
     except TypeError:
         raise TypeError(f"{name} must be an integer") from None
-    if not 0 <= value <= 0xFFFFFFFF:
+    return PyLong_AsLongLongAndOverflow(value, overflow)
+
+
+cdef int _stream_id(object value) except -1:
+    """Validate and return a nonzero HTTP/2 stream identifier."""
+    cdef int overflow
+    cdef long long result = _integer(value, "stream_id", &overflow)
+    if overflow or result <= 0 or result > 0x7FFFFFFF:
+        raise ValueError("stream_id is out of range")
+    return <int>result
+
+
+cdef uint32_t _uint32(object value, str name) except *:
+    """Validate and return an unsigned 32-bit integer."""
+    cdef int overflow
+    cdef long long result = _integer(value, name, &overflow)
+    if overflow or result < 0 or result > 0xFFFFFFFF:
         raise ValueError(f"{name} is out of range")
-    return value
+    return <uint32_t>result
 
 
 cdef uint64_t _uint64(object value, str name) except *:
@@ -1831,41 +1824,36 @@ cdef size_t _positive_size(object value, str name) except *:
 
 cdef int32_t _uint31(object value, str name) except -1:
     """Validate an unsigned 31-bit protocol value."""
-    try:
-        value = integer_index(value)
-    except TypeError:
-        raise TypeError(f"{name} must be an integer") from None
-    if not 0 <= value <= 0x7FFFFFFF:
+    cdef int overflow
+    cdef long long result = _integer(value, name, &overflow)
+    if overflow or result < 0 or result > 0x7FFFFFFF:
         raise ValueError(f"{name} is out of range")
-    return value
+    return <int32_t>result
 
 
 cdef Py_ssize_t _nonnegative_size(object value, str name) except -1:
     """Validate and return a non-negative platform-sized integer."""
-    try:
-        value = integer_index(value)
-    except TypeError:
-        raise TypeError(f"{name} must be an integer") from None
-    if value < 0:
+    cdef int overflow
+    cdef long long result = _integer(value, name, &overflow)
+    if overflow < 0 or (not overflow and result < 0):
         raise ValueError(f"{name} must be non-negative")
-    if value > ((<size_t>-1) >> 1):
+    if overflow or <size_t>result > ((<size_t>-1) >> 1):
         raise ValueError(f"{name} is too large for this platform")
-    return value
+    return <Py_ssize_t>result
 
 
 cdef dict _settings_snapshot(_nghttp2.nghttp2_session *session, bint local):
     """Copy native local or peer SETTINGS values into a Python mapping."""
     cdef dict result = {}
-    cdef int identifier
 
-    for identifier in (1, 2, 3, 4, 5, 6, 8, 9):
+    for setting in Setting:
         if local:
-            result[identifier] = _nghttp2.nghttp2_session_get_local_settings(
-                session, identifier,
+            result[setting] = _nghttp2.nghttp2_session_get_local_settings(
+                session, setting,
             )
         else:
-            result[identifier] = _nghttp2.nghttp2_session_get_remote_settings(
-                session, identifier,
+            result[setting] = _nghttp2.nghttp2_session_get_remote_settings(
+                session, setting,
             )
     return result
 
@@ -1897,7 +1885,7 @@ cdef object _nghttp2_error(int error_code):
     ):
         return ConnectionClosingError(message)
     if error_code == _nghttp2.NGHTTP2_ERR_DATA_EXIST:
-        return StreamProtocolError(message)
+        return StreamStateError(message)
     if error_code == _nghttp2.NGHTTP2_ERR_BAD_CLIENT_MAGIC:
         return ConnectionProtocolError(message)
     if error_code in (
@@ -1955,6 +1943,24 @@ cdef void _random_bytes(uint8_t *destination, size_t length) noexcept:
         pass
 
 
+cdef char *_reserve_output(Connection connection, size_t length) except NULL:
+    """Return space for more output, growing the staging buffer geometrically."""
+    cdef Py_ssize_t used = connection._output_size
+    cdef Py_ssize_t capacity = PyByteArray_GET_SIZE(connection._output)
+    cdef Py_ssize_t target
+
+    if length > <size_t>(((<size_t>-1) >> 1) - <size_t>used):
+        raise MemoryError("outbound data is too large")
+    target = used + <Py_ssize_t>length
+    if target > capacity:
+        # Doubling a capacity this large could overflow Py_ssize_t.
+        if capacity < (((<size_t>-1) >> 2)):
+            target = max(target, 2 * capacity, 4096)
+        PyByteArray_Resize(connection._output, target)
+    connection._output_size = used + <Py_ssize_t>length
+    return PyByteArray_AS_STRING(connection._output) + used
+
+
 cdef _nghttp2.nghttp2_ssize _collect_output(
     _nghttp2.nghttp2_session *session,
     const uint8_t *data,
@@ -1965,22 +1971,13 @@ cdef _nghttp2.nghttp2_ssize _collect_output(
     """Append serialized bytes while honoring the current public byte limit."""
     cdef Connection connection = <Connection>user_data
     cdef size_t accepted = length
-    cdef Py_ssize_t current_size
 
     if connection._output_remaining >= 0:
         if connection._output_remaining == 0:
             return _nghttp2.NGHTTP2_ERR_WOULDBLOCK
         accepted = min(accepted, <size_t>connection._output_remaining)
     try:
-        current_size = PyByteArray_GET_SIZE(connection._output)
-        if accepted > ((<size_t>-1) >> 1) - <size_t>current_size:
-            raise MemoryError("outbound data is too large")
-        PyByteArray_Resize(connection._output, current_size + accepted)
-        memcpy(
-            PyByteArray_AS_STRING(connection._output) + current_size,
-            data,
-            accepted,
-        )
+        memcpy(_reserve_output(connection, accepted), data, accepted)
     except BaseException as error:
         return _callback_failed(connection, error)
     if connection._output_remaining >= 0:
@@ -1998,8 +1995,8 @@ cdef inline size_t _copy_body(
     cdef bytes chunk
     cdef size_t available, copied = 0, take
 
-    while body.chunks and copied < length:
-        chunk = body.chunks[0]
+    while body.head < len(body.chunks) and copied < length:
+        chunk = body.chunks[body.head]
         available = len(chunk) - body.offset
         take = min(available, length - copied)
         memcpy(destination + copied, PyBytes_AS_STRING(chunk) + body.offset, take)
@@ -2008,8 +2005,18 @@ cdef inline size_t _copy_body(
         body.queued_size -= take
         connection._queued_body_size -= take
         if body.offset == len(chunk):
-            body.chunks.popleft()
+            # Release sent bytes now; the list slot is reclaimed below.
+            body.chunks[body.head] = None
+            body.head += 1
             body.offset = 0
+    # Removing the sent prefix shifts the rest, so do it only once the prefix is
+    # at least half the list; draining then stays linear in the chunk count.
+    if body.head == len(body.chunks):
+        body.chunks.clear()
+        body.head = 0
+    elif body.head >= 32 and 2 * body.head >= len(body.chunks):
+        del body.chunks[:body.head]
+        body.head = 0
     return copied
 
 
@@ -2024,24 +2031,24 @@ cdef int _send_body(
     """Collect a whole DATA frame without an intermediate native body copy."""
     cdef Connection connection = <Connection>user_data
     cdef _BodySource body
-    cdef Py_ssize_t current_size
     cdef size_t copied
     cdef char *destination
 
     try:
-        # No padding callback is installed; NO_COPY is only used without a limit.
-        if frame.data.padlen or connection._output_remaining >= 0:
+        # No padding callback is installed; _read_body only uses NO_COPY
+        # when the whole frame fits the remaining output limit.
+        if frame.data.padlen or 0 <= connection._output_remaining < length + 9:
             raise InternalError("unexpected DATA output mode")
         body = connection._bodies[frame.hd.stream_id]
-        current_size = PyByteArray_GET_SIZE(connection._output)
-        if length + 9 > ((<size_t>-1) >> 1) - <size_t>current_size:
+        if length > ((<size_t>-1) >> 1) - 9:
             raise MemoryError("outbound data is too large")
-        PyByteArray_Resize(connection._output, current_size + 9 + length)
-        destination = PyByteArray_AS_STRING(connection._output) + current_size
+        destination = _reserve_output(connection, length + 9)
         memcpy(destination, frame_header, 9)
         copied = _copy_body(connection, body, destination + 9, length)
         if copied != length:
             raise InternalError("DATA source did not provide the prepared body")
+        if connection._output_remaining >= 0:
+            connection._output_remaining -= length + 9
         return 0
     except BaseException as error:
         return _callback_failed(connection, error)
@@ -2072,14 +2079,17 @@ cdef _nghttp2.nghttp2_ssize _read_body(
 
     try:
         body = connection._bodies[stream_id]
-        if connection._output_remaining < 0:
+        copied = min(length, body.queued_size)
+        if (
+            connection._output_remaining < 0
+            or copied + 9 <= <size_t>connection._output_remaining
+        ):
             # The NO_COPY callback must accept a complete frame atomically.
-            copied = min(length, body.queued_size)
             complete = body.ended and copied == body.queued_size
             data_flags[0] |= _nghttp2.NGHTTP2_DATA_FLAG_NO_COPY
         else:
             copied = _copy_body(connection, body, <char *>buffer, length)
-            complete = body.ended and not body.chunks
+            complete = body.ended and body.head == len(body.chunks)
         if complete:
             if body.trailers is None:
                 data_flags[0] |= _nghttp2.NGHTTP2_DATA_FLAG_EOF
@@ -2224,7 +2234,8 @@ cdef inline void _headers_received(
 ):
     """Publish the event represented by one complete header block."""
     cdef tuple headers
-    cdef bytes status
+    cdef object header
+    cdef bytes status = b""
     cdef int category
 
     headers = tuple(connection._current_headers)
@@ -2236,7 +2247,10 @@ cdef inline void _headers_received(
             bool(frame.hd.flags & _nghttp2.NGHTTP2_FLAG_END_STREAM),
         ))
     else:
-        status = next((h[1] for h in headers if h[0] == b":status"), b"")
+        for header in headers:
+            if header[0] == b":status":
+                status = header[1]
+                break
         if status.startswith(b"1"):
             connection._events.append(InformationalResponseReceived(
                 frame.hd.stream_id,
@@ -2285,8 +2299,8 @@ cdef inline void _data_frame_received(
     else:
         payload = bytes(accumulator)
     if payload and not connection._auto_window_update:
-        connection._unacknowledged[frame.hd.stream_id] = (
-            connection._unacknowledged.get(frame.hd.stream_id, 0)
+        connection._unconsumed[frame.hd.stream_id] = (
+            connection._unconsumed.get(frame.hd.stream_id, 0)
             + len(payload)
         )
     connection._events.append(DataReceived(

@@ -4,6 +4,19 @@ from cpython.bytes cimport PyBytes_Check
 from libc.stdint cimport uint32_t
 from types import MappingProxyType
 
+from .enums import ErrorCode, Setting
+
+# Indexed by wire value; ErrorCode(i) fails at import if a code is ever skipped.
+cdef tuple _ERROR_CODES = tuple(ErrorCode(code) for code in range(len(ErrorCode)))
+cdef dict _SETTINGS = {setting: setting for setting in Setting}
+
+
+cdef inline object _error_code(uint32_t value):
+    """Return a known wire error code as its enum member."""
+    if value < <uint32_t>len(_ERROR_CODES):
+        return _ERROR_CODES[value]
+    return value
+
 
 cdef class Event:
     """Base type for events produced during HTTP/2 protocol processing."""
@@ -156,17 +169,18 @@ cdef class StreamReset(Event):
 
     Attributes:
         stream_id: Reset stream.
-        error_code: Wire error code supplied by the peer.
+        error_code: Wire error code supplied by the peer, as an ``ErrorCode``
+            member when known.
     """
 
     __match_args__ = ("stream_id", "error_code")
 
     cdef readonly int stream_id
-    cdef readonly uint32_t error_code
+    cdef readonly object error_code
 
     def __init__(self, int stream_id, uint32_t error_code):
         self.stream_id = stream_id
-        self.error_code = error_code
+        self.error_code = _error_code(error_code)
 
 
 cdef class StreamClosed(Event):
@@ -184,12 +198,12 @@ cdef class StreamClosed(Event):
     __match_args__ = ("stream_id", "error_code", "local_error")
 
     cdef readonly int stream_id
-    cdef readonly uint32_t error_code
+    cdef readonly object error_code
     cdef readonly object local_error
 
     def __init__(self, int stream_id, uint32_t error_code, object local_error):
         self.stream_id = stream_id
-        self.error_code = error_code
+        self.error_code = _error_code(error_code)
         self.local_error = local_error
 
 
@@ -197,7 +211,8 @@ cdef class SettingsReceived(Event):
     """A non-acknowledgement SETTINGS frame was received.
 
     Attributes:
-        settings: Received identifiers and values, including unknown IDs.
+        settings: Received values keyed by ``Setting`` members, or by
+            integers for unknown identifiers.
     """
 
     __match_args__ = ("settings",)
@@ -205,7 +220,9 @@ cdef class SettingsReceived(Event):
     cdef readonly object settings
 
     def __init__(self, dict settings):
-        self.settings = MappingProxyType(settings.copy())
+        self.settings = MappingProxyType(
+            {_SETTINGS.get(key, key): value for key, value in settings.items()}
+        )
 
 
 cdef class SettingsAcknowledged(Event):
@@ -269,21 +286,22 @@ cdef class GoAwayReceived(Event):
 
     Attributes:
         last_stream_id: Last local stream the peer may have processed.
-        error_code: Wire shutdown reason.
+        error_code: Wire shutdown reason, as an ``ErrorCode`` member when
+            known.
         debug_data: Opaque diagnostics supplied by the peer.
     """
 
     __match_args__ = ("last_stream_id", "error_code", "debug_data")
 
     cdef readonly int last_stream_id
-    cdef readonly uint32_t error_code
+    cdef readonly object error_code
     cdef readonly object debug_data
 
     def __init__(self, int last_stream_id, uint32_t error_code, object debug_data):
         if not PyBytes_Check(debug_data):
             raise TypeError("debug_data must be bytes")
         self.last_stream_id = last_stream_id
-        self.error_code = error_code
+        self.error_code = _error_code(error_code)
         self.debug_data = debug_data
 
 
@@ -294,19 +312,20 @@ cdef class ConnectionClosed(Event):
     must write the bytes returned by that call before closing its transport.
 
     Attributes:
-        error_code: Final HTTP/2 shutdown reason.
+        error_code: Final HTTP/2 shutdown reason, as an ``ErrorCode``
+            member when known.
         debug_data: Opaque diagnostics associated with that reason.
     """
 
     __match_args__ = ("error_code", "debug_data")
 
-    cdef readonly uint32_t error_code
+    cdef readonly object error_code
     cdef readonly object debug_data
 
     def __init__(self, uint32_t error_code, object debug_data):
         if not PyBytes_Check(debug_data):
             raise TypeError("debug_data must be bytes")
-        self.error_code = error_code
+        self.error_code = _error_code(error_code)
         self.debug_data = debug_data
 
 

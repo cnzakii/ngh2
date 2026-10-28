@@ -60,10 +60,10 @@ def server() -> Connection:
         lambda connection, value: connection.send_alt_svc(
             b'h3=":443"', stream_id=value
         ),
-        lambda connection, value: connection.stream_remote_window_size(value),
-        lambda connection, value: connection.stream_local_window_size(value),
-        lambda connection, value: connection.acknowledge_received_data(value, 1),
-        lambda connection, value: connection.acknowledge_received_data(0, value),
+        lambda connection, value: connection.remote_window_size(value),
+        lambda connection, value: connection.local_window_size(value),
+        lambda connection, value: connection.consume_received_data(1, value),
+        lambda connection, value: connection.consume_received_data(value, 0),
     ],
     ids=[
         "output-budget",
@@ -82,8 +82,8 @@ def server() -> Connection:
         "altsvc-stream",
         "remote-window",
         "local-window",
-        "acknowledge-amount",
-        "acknowledge-stream",
+        "consume-amount",
+        "consume-stream",
     ],
 )
 def test_integer_conversion_cannot_leave_a_stale_native_session(
@@ -179,8 +179,8 @@ def test_header_producers_cannot_submit_after_failing_the_connection(
     if method == "send_trailers":
         server.send_response(stream_id, [(b":status", b"200")])
     target, peer = (client, server) if method == "send_request" else (server, client)
-    peer.ping(b"first---")
-    peer.ping(b"second--")
+    peer.send_ping(b"first---")
+    peer.send_ping(b"second--")
     flood = peer.data_to_send()
 
     def fail_target():
@@ -231,8 +231,8 @@ def check_trailer_finalizer_reentrancy(position: str, never_indexed: bool) -> No
     stream_id = client.send_request(REQUEST_HEADERS)
     server.receive_data(client.data_to_send())
     server.events()
-    server.ping(b"first---")
-    server.ping(b"second--")
+    server.send_ping(b"first---")
+    server.send_ping(b"second--")
     flood = server.data_to_send()
     invalidated = []
 

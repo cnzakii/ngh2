@@ -132,7 +132,7 @@ def test_body_output_survives_limits_and_window_resumption(
             if isinstance(event, DataReceived):
                 received.extend(event.data)
                 if manual:
-                    server.acknowledge_received_data(len(event.data), stream_id)
+                    server.consume_received_data(stream_id, len(event.data))
                 if event.end_stream:
                     assert not trailers
                     ended = True
@@ -208,3 +208,27 @@ def test_multiplexed_bodies_resume_without_mixing_stream_buffers(
     assert ended == payloads.keys()
     assert received == payloads
     assert client.queued_body_size() == 0
+
+
+@pytest.mark.parametrize("amount", [9, 16_393, 16_402, 65_536])
+def test_output_limits_do_not_change_the_serialized_bytes(
+    handshake: Callable[[Connection, Connection], None],
+    amount: int,
+) -> None:
+    def serialize(amount: int | None) -> bytes:
+        client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
+        handshake(client, server)
+        server.set_local_window_size(1 << 20)
+        client.receive_data(server.data_to_send())
+        stream_id = client.send_request(REQUEST)
+        for chunk in (b"a" * 40_000, b"b" * 3, b"c" * 25_000):
+            client.send_data(stream_id, chunk)
+        client.send_trailers(stream_id, [(b"x-done", b"1")])
+        output = bytearray()
+        while chunk := client.data_to_send(amount):
+            if amount is not None:
+                assert len(chunk) <= amount
+            output += chunk
+        return bytes(output)
+
+    assert serialize(amount) == serialize(None)

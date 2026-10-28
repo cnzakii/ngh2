@@ -1,3 +1,4 @@
+import re
 import runpy
 import sys
 from pathlib import Path
@@ -100,6 +101,19 @@ def test_python_example_runs(
     example = Path(__file__).parents[1] / "examples" / "python" / filename
 
     runpy.run_path(str(example), run_name="__main__")
+
+    assert capsys.readouterr().out == expected_output
+
+
+def test_readme_quick_look_prints_its_documented_output(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+    match = re.search(r"```python\n(.*?)```\n\n```text\n(.*?)```", readme, re.S)
+    assert match is not None
+    source, expected_output = match.groups()
+
+    exec(compile(source, "README.md", "exec"), {})
 
     assert capsys.readouterr().out == expected_output
 

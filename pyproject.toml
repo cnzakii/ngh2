@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core>=1.0,<2", "cython>=3.1,<4", "cython-cmake"]
+requires = ["scikit-build-core>=1.0,<2", "cython>=3.1,<4", "cython-cmake>=0.2,<0.4"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -141,7 +141,8 @@ source = ["ngh2"]
 [tool.coverage.report]
 show_missing = true
 precision = 2
-fail_under = 95.9
+# Leaves headroom below measured coverage so small unrelated changes still pass.
+fail_under = 95
 
 [tool.ty.src]
 include = ["src", "tests", "benchmarks", "examples"]

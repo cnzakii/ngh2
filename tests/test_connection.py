@@ -17,8 +17,8 @@ from ngh2 import (
     Role,
     SettingsReceived,
     StreamClosed,
-    StreamProtocolError,
     StreamReset,
+    StreamStateError,
     TrailersReceived,
 )
 
@@ -154,7 +154,7 @@ class TestConnection:
         )
         server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
 
-        with pytest.raises(StreamProtocolError, match="precede the final"):
+        with pytest.raises(StreamStateError, match="precede the final"):
             server.send_informational_response(stream_id, [(b":status", b"103")])
 
         exchange(server, client)
@@ -215,9 +215,9 @@ class TestConnection:
         exchange(client, server)
         exchange(server, client)
 
-        with pytest.raises(StreamProtocolError, match="no open body"):
+        with pytest.raises(StreamStateError, match="no open body"):
             client.send_data(1, b"body")
-        with pytest.raises(StreamProtocolError, match="no open body"):
+        with pytest.raises(StreamStateError, match="no open body"):
             client.send_trailers(1, [])
 
         stream_id = client.send_request(
@@ -236,9 +236,9 @@ class TestConnection:
                 cast(Sequence[Header], [b"not-a-pair"]),
             )
         client.send_trailers(stream_id, [])
-        with pytest.raises(StreamProtocolError, match="already ended"):
+        with pytest.raises(StreamStateError, match="already ended"):
             client.send_data(stream_id, b"body")
-        with pytest.raises(StreamProtocolError, match="already ended"):
+        with pytest.raises(StreamStateError, match="already ended"):
             client.send_trailers(stream_id, [])
 
     def test_response_rejects_a_second_final_response(self):
@@ -263,7 +263,7 @@ class TestConnection:
         server.events()
 
         server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
-        with pytest.raises(StreamProtocolError, match="already pending"):
+        with pytest.raises(StreamStateError, match="already pending"):
             server.send_response(stream_id, [(b":status", b"204")], end_stream=True)
 
     def test_stream_identifiers_and_headers_are_validated(self):
