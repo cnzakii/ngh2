@@ -1,10 +1,13 @@
+import tracemalloc
 from collections.abc import Sequence
 from typing import cast
 
 import pytest
 
 from ngh2 import (
+    Configuration,
     Connection,
+    ConnectionClosed,
     ConnectionClosingError,
     DataReceived,
     ErrorCode,
@@ -15,6 +18,7 @@ from ngh2 import (
     RequestReceived,
     ResponseReceived,
     Role,
+    Setting,
     SettingsReceived,
     StreamClosed,
     StreamReset,
@@ -336,7 +340,8 @@ class TestConnection:
         assert second_output
         assert client.queued_body_size(stream_id) == 0
 
-    def test_fragmented_input_emits_one_event_per_data_frame(self):
+    @pytest.mark.parametrize("fragment_size", [1, 1_024], ids=["bytewise", "1k"])
+    def test_fragmented_input_emits_one_event_per_data_frame(self, fragment_size):
         client = Connection(Role.CLIENT)
         server = Connection(Role.SERVER)
         client.initiate_connection()
@@ -371,8 +376,8 @@ class TestConnection:
                 frame_count += 1
             offset += 9 + frame_length
 
-        for offset in range(0, len(wire_data), 1_024):
-            server.receive_data(wire_data[offset : offset + 1_024])
+        for offset in range(0, len(wire_data), fragment_size):
+            server.receive_data(wire_data[offset : offset + fragment_size])
 
         data_events = [
             event for event in server.events() if isinstance(event, DataReceived)
@@ -381,6 +386,215 @@ class TestConnection:
         assert len(data_events) == frame_count
         assert b"".join(event.data for event in data_events) == payload
         assert data_events[-1].end_stream
+
+    def test_fragmented_padded_data_excludes_padding(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        stream_id = client.send_request(
+            [
+                (b":method", b"POST"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/upload"),
+            ],
+        )
+        exchange(client, server)
+        server.events()
+        # PADDED and END_STREAM, a 10-byte pad, then the 5-byte body.
+        padded_data = (
+            b"\x00\x00\x10\x00\x09"
+            + stream_id.to_bytes(4, "big")
+            + b"\x0a"
+            + b"hello"
+            + bytes(10)
+        )
+
+        for offset in range(len(padded_data)):
+            server.receive_data(padded_data[offset : offset + 1])
+
+        data_events = [
+            event for event in server.events() if isinstance(event, DataReceived)
+        ]
+        assert [(event.data, event.end_stream) for event in data_events] == [
+            (b"hello", True),
+        ]
+
+    def test_stream_reset_inside_a_data_frame_does_not_leak_into_the_next(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        request = [
+            (b":method", b"POST"),
+            (b":scheme", b"https"),
+            (b":authority", b"example.test"),
+            (b":path", b"/upload"),
+        ]
+        first = client.send_request(request)
+        client.send_data(first, b"a" * 10_000, end_stream=True)
+        first_wire = client.data_to_send()
+        server.receive_data(first_wire[:-5_000])
+        server.reset_stream(first, ErrorCode.CANCEL)
+        server.data_to_send()
+        server.events()
+
+        second = client.send_request(request)
+        client.send_data(second, b"b" * 10_000, end_stream=True)
+        server.receive_data(first_wire[-5_000:] + client.data_to_send())
+
+        data_events = [
+            event for event in server.events() if isinstance(event, DataReceived)
+        ]
+        assert [(event.stream_id, event.data) for event in data_events] == [
+            (second, b"b" * 10_000),
+        ]
+
+    def test_manual_flow_control_releases_data_discarded_mid_frame(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER, Configuration(auto_window_update=False))
+        client.initiate_connection()
+        server.initiate_connection()
+        exchange(client, server)
+        exchange(server, client)
+        request = [
+            (b":method", b"POST"),
+            (b":scheme", b"https"),
+            (b":authority", b"example.test"),
+            (b":path", b"/upload"),
+        ]
+        # Each reset leaves half a frame received but never delivered; seven
+        # of them used to exhaust the 65,535-byte connection window.
+        for _ in range(16):
+            stream_id = client.send_request(request)
+            client.send_data(stream_id, b"a" * 10_000, end_stream=True)
+            wire_data = client.data_to_send()
+            server.receive_data(wire_data[:-5_000])
+            server.reset_stream(stream_id, ErrorCode.CANCEL)
+            client.receive_data(server.data_to_send())
+            server.receive_data(wire_data[-5_000:])
+            client.receive_data(server.data_to_send())
+        server.events()
+
+        stream_id = client.send_request(request)
+        client.send_data(stream_id, b"b" * 10_000, end_stream=True)
+        server.receive_data(client.data_to_send())
+
+        received = b"".join(
+            event.data for event in server.events() if isinstance(event, DataReceived)
+        )
+        assert received == b"b" * 10_000
+
+    def test_data_frame_header_reserves_no_more_than_the_receive_window(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection({Setting.MAX_FRAME_SIZE: 16_777_215})
+        exchange(client, server)
+        exchange(server, client)
+        stream_id = client.send_request(
+            [
+                (b":method", b"POST"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/upload"),
+            ],
+        )
+        exchange(client, server)
+        server.events()
+        # A 16 MiB DATA header followed by only ten payload bytes.
+        partial_frame = (
+            b"\xff\xff\xff\x00\x00" + stream_id.to_bytes(4, "big") + b"x" * 10
+        )
+
+        already_tracing = tracemalloc.is_tracing()
+        if not already_tracing:
+            tracemalloc.start()
+        try:
+            before, _ = tracemalloc.get_traced_memory()
+            server.receive_data(partial_frame)
+            retained, _ = tracemalloc.get_traced_memory()
+        finally:
+            if not already_tracing:
+                tracemalloc.stop()
+
+        assert retained - before < 2 * 65_535
+
+    def test_data_frame_outgrowing_its_starting_window_is_assembled(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection({Setting.INITIAL_WINDOW_SIZE: 1_000})
+        exchange(client, server)
+        exchange(server, client)
+        stream_id = client.send_request(
+            [
+                (b":method", b"POST"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/upload"),
+            ],
+        )
+        exchange(client, server)
+        server.events()
+
+        # The frame is longer than the 1,000-byte stream window, but each piece
+        # fits because libnghttp2 reopens the window when it queues
+        # WINDOW_UPDATE, and the server sends each update before reading on.
+        server.receive_data(b"\x00\x0f\xa0\x00\x01" + stream_id.to_bytes(4, "big"))
+        for _ in range(10):
+            server.receive_data(b"x" * 400)
+            server.data_to_send()
+
+        events = server.events()
+        assert [
+            (event.stream_id, event.data, event.end_stream)
+            for event in events
+            if isinstance(event, DataReceived)
+        ] == [(stream_id, b"x" * 4_000, True)]
+        assert not any(isinstance(event, ConnectionClosed) for event in events)
+
+    def test_data_frame_growth_reserves_in_proportion_to_received_bytes(self):
+        client = Connection(Role.CLIENT)
+        server = Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection(
+            {Setting.INITIAL_WINDOW_SIZE: 1_000, Setting.MAX_FRAME_SIZE: 16_777_215},
+        )
+        exchange(client, server)
+        exchange(server, client)
+        stream_id = client.send_request(
+            [
+                (b":method", b"POST"),
+                (b":scheme", b"https"),
+                (b":authority", b"example.test"),
+                (b":path", b"/upload"),
+            ],
+        )
+        exchange(client, server)
+        server.events()
+
+        already_tracing = tracemalloc.is_tracing()
+        if not already_tracing:
+            tracemalloc.start()
+        try:
+            before, _ = tracemalloc.get_traced_memory()
+            # A 16 MiB DATA header, then 1,200 bytes past the reopened window.
+            server.receive_data(b"\xff\xff\xff\x00\x00" + stream_id.to_bytes(4, "big"))
+            for _ in range(3):
+                server.receive_data(b"x" * 400)
+                server.data_to_send()
+            retained, _ = tracemalloc.get_traced_memory()
+        finally:
+            if not already_tracing:
+                tracemalloc.stop()
+
+        assert retained - before < 65_535
 
     def test_peer_rejects_an_invalid_outbound_message_block(self):
         client = Connection(Role.CLIENT)

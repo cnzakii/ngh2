@@ -32,6 +32,11 @@ class Configuration:
             by a client connection. Must fit an unsigned 32-bit integer.
         max_send_header_block_length: Maximum outbound header block length as
             estimated before HPACK encoding. Must be non-negative.
+        max_send_data_frame_size: Maximum payload of each outbound DATA frame.
+            Frames also stay within the peer's ``SETTINGS_MAX_FRAME_SIZE``,
+            which defaults to 16,384 bytes. Larger frames move large bodies
+            with less per-frame work; smaller frames interleave concurrent
+            streams more finely. Must be from 1 to 16,777,215.
         max_deflate_dynamic_table_size: Maximum HPACK dynamic table size used
             to encode outbound headers. Must be non-negative.
         max_outbound_ack: Maximum queued SETTINGS and PING acknowledgements
@@ -56,6 +61,7 @@ class Configuration:
     initial_peer_max_concurrent_streams: int = 100
     max_reserved_remote_streams: int = 200
     max_send_header_block_length: int = 65_536
+    max_send_data_frame_size: int = 65_536
     max_deflate_dynamic_table_size: int = 4_096
     max_outbound_ack: int = 1_000
     max_settings: int = 32

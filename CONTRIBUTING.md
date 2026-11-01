@@ -54,7 +54,8 @@ uv run --locked --no-dev --group docs zensical build --strict
 Use `zensical serve` with the same `--no-dev --group docs` arguments for local
 preview.
 
-The generic h2spec suite runs when the external `h2spec` executable is
+The full h2spec suite runs, with its expected failures listed in
+`tests/test_interop_h2spec.py`, when the external `h2spec` executable is
 installed:
 
 ```console
@@ -100,8 +101,10 @@ uv run --locked python benchmarks/render_results.py \
 The result records the measured checkout with `git describe --dirty`, so it is
 written outside tracked files while measuring. The renderer updates the README
 table between its markers; a test fails if the two drift apart. Inspect
-`pyperf` warnings before publishing results. The multiplexed workload reports
-time per exchange within a 100-stream batch.
+`pyperf` warnings before publishing results. Times are per iteration: one
+request, or ten for the concurrent scenarios. The module
+docstring of `benchmarks/compare_h2.py` lists the terms both libraries are held
+to.
 
 Refresh the published comparison for each release. Between releases,
 [CodSpeed](https://codspeed.io/) runs the ngh2 side of the same workloads on

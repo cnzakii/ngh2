@@ -1,60 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="548" viewBox="0 0 960 548" role="img" aria-labelledby="title desc">
-<title id="title">ngh2 and h2 Python benchmark</title>
-<desc id="desc">Relative throughput for five HTTP/2 scenarios. Higher is faster; h2 4.4.1 is the 1.00 baseline.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="310" viewBox="0 0 760 310" role="img" aria-labelledby="title desc">
+<title id="title">ngh2 and h2 time per iteration</title>
+<desc id="desc">1 request · no body: ngh2 2.60 µs, h2 4.4.1 65.61 µs, 25.2 times faster; 10 concurrent requests · no body: ngh2 16.94 µs, h2 4.4.1 499.58 µs, 29.5 times faster; 10 concurrent · 10 MiB download each · max window: ngh2 17.58 ms, h2 4.4.1 126.11 ms, 7.2 times faster.</desc>
 <style>
-text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-.canvas{fill:#fbfbfd}.primary{fill:#1d1d1f}.secondary{fill:#6e6e73}.grid{stroke:#e5e5ea}
-.candidate{fill:#3a6ea5}.reference{fill:#c7c7cc}
+text{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums}
+.card{fill:#ffffff;stroke:#d1d9e0}.rule{stroke:#eff2f5}.primary{fill:#1f2328}.secondary{fill:#59636e}.candidate{fill:#4b8bbe}.reference{fill:#d1d9e0}.badge{fill:#4b8bbe;fill-opacity:0.14}.badge-text{fill:#306998}
+@media (prefers-color-scheme:dark){.card{fill:#0d1117;stroke:#3d444d}.rule{stroke:#262c36}.primary{fill:#f0f6fc}.secondary{fill:#9198a1}.reference{fill:#3d444d}.badge{fill-opacity:0.22}.badge-text{fill:#8ab4df}}
 </style>
-<rect class="canvas" width="960" height="548"/>
-<text class="secondary" x="40" y="27" font-size="11" font-weight="500" letter-spacing="1.4">PYTHON · HTTP/2</text>
-<text class="primary" x="40" y="58" font-size="25" font-weight="500" letter-spacing="-0.4">Relative throughput by scenario</text>
-<text class="secondary" x="40" y="83" font-size="13">h2 4.4.1 = 1.00× · higher is faster · latency per exchange</text>
-<line class="grid" x1="360.0" y1="108" x2="360.0" y2="492"/>
-<text class="secondary" x="360.0" y="102" text-anchor="middle" font-size="10">0×</text>
-<line class="grid" x1="492.5" y1="108" x2="492.5" y2="492"/>
-<text class="secondary" x="492.5" y="102" text-anchor="middle" font-size="10">10×</text>
-<line class="grid" x1="625.0" y1="108" x2="625.0" y2="492"/>
-<text class="secondary" x="625.0" y="102" text-anchor="middle" font-size="10">20×</text>
-<line class="grid" x1="757.5" y1="108" x2="757.5" y2="492"/>
-<text class="secondary" x="757.5" y="102" text-anchor="middle" font-size="10">30×</text>
-<line class="grid" x1="890.0" y1="108" x2="890.0" y2="492"/>
-<text class="secondary" x="890.0" y="102" text-anchor="middle" font-size="10">40×</text>
-<text class="primary" x="40" y="139" font-size="13" font-weight="500">Small request/204 round trip</text>
-<text class="secondary" x="40" y="161" font-size="11">1.96 µs vs 60.78 µs</text>
-<text class="secondary" x="308" y="136" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="124" width="410.0" height="15" rx="7.5"/>
-<text class="primary" x="780.0" y="136" font-size="11" font-weight="500">30.9×</text>
-<text class="secondary" x="308" y="159" text-anchor="end" font-size="10">h2 4.4.1</text>
-<rect class="reference" x="360" y="147" width="13.2" height="10" rx="5"/>
-<text class="primary" x="40" y="215" font-size="13" font-weight="500">Header block · 32 fields</text>
-<text class="secondary" x="40" y="237" font-size="11">4.16 µs vs 146.48 µs</text>
-<text class="secondary" x="308" y="212" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="200" width="466.0" height="15" rx="7.5"/>
-<text class="primary" x="836.0" y="212" font-size="11" font-weight="500">35.2×</text>
-<text class="secondary" x="308" y="235" text-anchor="end" font-size="10">h2 4.4.1</text>
-<rect class="reference" x="360" y="223" width="13.2" height="10" rx="5"/>
-<text class="primary" x="40" y="291" font-size="13" font-weight="500">Fragmented request · 5 B</text>
-<text class="secondary" x="40" y="313" font-size="11">2.34 µs vs 64.37 µs</text>
-<text class="secondary" x="308" y="288" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="276" width="363.8" height="15" rx="7.5"/>
-<text class="primary" x="733.8" y="288" font-size="11" font-weight="500">27.5×</text>
-<text class="secondary" x="308" y="311" text-anchor="end" font-size="10">h2 4.4.1</text>
-<rect class="reference" x="360" y="299" width="13.2" height="10" rx="5"/>
-<text class="primary" x="40" y="367" font-size="13" font-weight="500">Request body · 32 KiB</text>
-<text class="secondary" x="40" y="389" font-size="11">5.81 µs vs 119.39 µs</text>
-<text class="secondary" x="308" y="364" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="352" width="272.3" height="15" rx="7.5"/>
-<text class="primary" x="642.3" y="364" font-size="11" font-weight="500">20.5×</text>
-<text class="secondary" x="308" y="387" text-anchor="end" font-size="10">h2 4.4.1</text>
-<rect class="reference" x="360" y="375" width="13.2" height="10" rx="5"/>
-<text class="primary" x="40" y="443" font-size="13" font-weight="500">Multiplexed batch · 100 streams</text>
-<text class="secondary" x="40" y="465" font-size="11">1.32 µs vs 48.32 µs</text>
-<text class="secondary" x="308" y="440" text-anchor="end" font-size="10">ngh2</text>
-<rect class="candidate" x="360" y="428" width="486.8" height="15" rx="7.5"/>
-<text class="primary" x="856.8" y="440" font-size="11" font-weight="500">36.7×</text>
-<text class="secondary" x="308" y="463" text-anchor="end" font-size="10">h2 4.4.1</text>
-<rect class="reference" x="360" y="451" width="13.2" height="10" rx="5"/>
-<text class="secondary" x="40" y="518" font-size="10">ngh2 0.4.0 · h2 4.4.1 · CPython 3.13.12 (64-bit)</text>
-<text class="secondary" x="40" y="535" font-size="10">Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-10-29</text>
+<rect class="card" x="0.5" y="0.5" width="759" height="309" rx="12"/>
+<text class="primary" x="24" y="40" font-size="14" font-weight="600">1 request · no body</text>
+<rect class="badge" x="632" y="24" width="104" height="22" rx="11"/>
+<text class="badge-text" x="684.0" y="39" text-anchor="middle" font-size="12" font-weight="700">25.2× faster</text>
+<text class="secondary" x="24" y="68" font-size="12" font-weight="500">ngh2</text>
+<rect class="candidate" x="96" y="58" width="21.5" height="12" rx="6.0"/>
+<text class="primary" x="125.5" y="68" font-size="12" font-weight="500">2.60 µs</text>
+<text class="secondary" x="24" y="88" font-size="12" font-weight="500">h2 4.4.1</text>
+<rect class="reference" x="96" y="78" width="544.0" height="12" rx="6.0"/>
+<text class="primary" x="648.0" y="88" font-size="12" font-weight="500">65.61 µs</text>
+<line class="rule" x1="24" y1="106" x2="736" y2="106"/>
+<text class="primary" x="24" y="138" font-size="14" font-weight="600">10 concurrent requests · no body</text>
+<rect class="badge" x="632" y="122" width="104" height="22" rx="11"/>
+<text class="badge-text" x="684.0" y="137" text-anchor="middle" font-size="12" font-weight="700">29.5× faster</text>
+<text class="secondary" x="24" y="166" font-size="12" font-weight="500">ngh2</text>
+<rect class="candidate" x="96" y="156" width="18.4" height="12" rx="6.0"/>
+<text class="primary" x="122.4" y="166" font-size="12" font-weight="500">16.94 µs</text>
+<text class="secondary" x="24" y="186" font-size="12" font-weight="500">h2 4.4.1</text>
+<rect class="reference" x="96" y="176" width="544.0" height="12" rx="6.0"/>
+<text class="primary" x="648.0" y="186" font-size="12" font-weight="500">499.58 µs</text>
+<line class="rule" x1="24" y1="204" x2="736" y2="204"/>
+<text class="primary" x="24" y="236" font-size="14" font-weight="600">10 concurrent · 10 MiB download each · max window</text>
+<rect class="badge" x="632" y="220" width="104" height="22" rx="11"/>
+<text class="badge-text" x="684.0" y="235" text-anchor="middle" font-size="12" font-weight="700">7.2× faster</text>
+<text class="secondary" x="24" y="264" font-size="12" font-weight="500">ngh2</text>
+<rect class="candidate" x="96" y="254" width="75.9" height="12" rx="6.0"/>
+<text class="primary" x="179.9" y="264" font-size="12" font-weight="500">17.58 ms</text>
+<text class="secondary" x="24" y="284" font-size="12" font-weight="500">h2 4.4.1</text>
+<rect class="reference" x="96" y="274" width="544.0" height="12" rx="6.0"/>
+<text class="primary" x="648.0" y="284" font-size="12" font-weight="500">126.11 ms</text>
 </svg>

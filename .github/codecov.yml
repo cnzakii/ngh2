@@ -1,0 +1,15 @@
+# Coverage may drop by up to 1% from the base commit. Lines reached only by
+# native or allocation failures cannot be covered in CI, and each new one
+# lowers the total slightly. CI's own fail_under in pyproject.toml stays the
+# hard floor.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    # A small patch loses about a point per such line, so its coverage is
+    # reported without failing the check.
+    patch:
+      default:
+        informational: true

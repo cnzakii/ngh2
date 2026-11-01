@@ -574,6 +574,8 @@ class TestControlFrames:
         assert server.get_stream_priority(stream_id) == Priority(2, True)
         assert server.set_stream_priority(stream_id, Priority(99))
         assert server.get_stream_priority(stream_id) == Priority(7)
+        assert server.set_stream_priority(stream_id, Priority(3, cast(bool, 2)))
+        assert server.get_stream_priority(stream_id) == Priority(3, True)
         with pytest.raises(ValueError, match=r"priority\.urgency is out of range"):
             server.set_stream_priority(stream_id, Priority(-1))
 

@@ -37,8 +37,8 @@ calls into bytes to send; your code decides how and when those bytes move.
 
 ### Fast
 
-ngh2 completes HTTP/2 exchanges at least 20× faster than the pure-Python
-[h2](https://h2.readthedocs.io/) in every scenario measured below.
+ngh2 completes HTTP/2 exchanges up to 30× faster than the pure-Python
+[h2](https://h2.readthedocs.io/). Every measured scenario is listed below.
 
 </div>
 <div markdown>
@@ -62,10 +62,18 @@ asyncio, threads, Trio, or in-memory tests.
 
 ### Benchmark details
 
-Each scenario runs complete exchanges through the public APIs of ngh2 and h2,
-measured with `pyperf`. The timer covers stream state, HPACK, flow-control
-accounting, event construction, and frame serialization; connections are set
-up once outside it.
+![ngh2 and h2 time per iteration in three scenarios](https://raw.githubusercontent.com/cnzakii/ngh2/main/docs/assets/python-benchmark.svg)
+
+The chart shows three of the scenarios; the table lists all of them. Each
+scenario runs complete HTTP/2 exchanges through the public APIs of ngh2 and h2,
+measured with `pyperf`. Times are per iteration: one request, or ten
+concurrent requests on one connection, with every response body read. Writes
+are separate `send_data()` calls for one request body. Max window raises every
+flow-control window to 2³¹−1, the protocol maximum; other scenarios keep the
+65,535-byte default. Each library talks to itself in memory and reads its
+peer's output in 64 KiB pieces. Work that h2 leaves to its caller, such as
+splitting bodies to the window and acknowledging received data, is timed with
+it.
 
 --8<-- "python-benchmark.md"
 

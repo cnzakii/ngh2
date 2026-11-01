@@ -127,6 +127,29 @@ This method does not say that application data was consumed. In manual mode,
 continue to call `consume_received_data()` only after the downstream
 consumer accepts each `DataReceived` payload.
 
+## Send large bodies in larger frames
+
+Each DATA frame becomes one `DataReceived` event and one round of framing
+work. A sender uses frames up to the smaller of its
+`Configuration.max_send_data_frame_size`, 64 KiB by default, and the
+receiver's `SETTINGS_MAX_FRAME_SIZE`, which starts at 16 KiB. Raise both when
+two endpoints move large bodies:
+
+```python
+# Receiving endpoint: allow the peer to send frames up to 1 MiB.
+connection.initiate_connection({ngh2.Setting.MAX_FRAME_SIZE: 1_048_576})
+
+# Sending endpoint: use up to 1 MiB of what the peer allows.
+config = ngh2.Configuration(max_send_data_frame_size=1_048_576)
+```
+
+Receive windows still bound how much DATA is in flight, so raise them with
+`set_local_window_size()` as well. Larger frames reduce per-frame work but
+interleave concurrent streams less finely. While a frame arrives, the receiver
+holds one buffer per connection. It starts no larger than the receive window,
+and if window updates admit more of the frame, it can grow up to the advertised
+`MAX_FRAME_SIZE`.
+
 ## Keep reading while a sender is blocked
 
 When a remote window reaches zero, `data_to_send()` can leave body bytes

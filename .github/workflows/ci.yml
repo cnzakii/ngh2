@@ -193,7 +193,7 @@ jobs:
             .venv/bin/python -m pytest -m "not h2spec" --capture=sys
 
   h2spec:
-    name: h2spec generic conformance
+    name: h2spec conformance
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04

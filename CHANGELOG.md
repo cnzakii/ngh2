@@ -4,6 +4,36 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- `Configuration.max_send_data_frame_size` limits each outbound DATA frame,
+  64 KiB by default. DATA frames now use up to the smaller of this limit and
+  the peer's `SETTINGS_MAX_FRAME_SIZE`; previously they never exceeded 16 KiB
+  even when the peer allowed larger frames.
+
+### Changed
+
+- Large bodies take less CPU time. `data_to_send()` no longer copies its
+  output a second time, and a DATA frame split across `receive_data()` calls
+  is assembled in one buffer instead of being regrown for each part. A local
+  1 MiB upload read in 64 KiB pieces took about a third less time, and about
+  45% less when both peers allowed 1 MiB frames.
+- Creating a `Connection` without a `Configuration` takes about a third less
+  time, because connections share one default `Configuration` instead of
+  building their own.
+- `data_to_send(amount)` stops taking body bytes once `amount` is reached, so
+  `queued_body_size()` no longer drops by a DATA frame that was not returned.
+
+### Fixed
+
+- With `auto_window_update=False`, resetting a stream while one of its DATA
+  frames was partly received no longer loses that part's connection-window
+  credit. Repeated resets could previously stall every stream on the
+  connection.
+- `set_stream_priority()` treats `Priority.incremental` as a truth value.
+  Integers other than 0 and 1 previously kept only their lowest bit, so `2`
+  meant non-incremental.
+
 ## [0.4.0] - 2026-10-29
 
 ### Added
