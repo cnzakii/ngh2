@@ -11,6 +11,7 @@ from ngh2 import (
     ErrorCode,
     RequestReceived,
     Role,
+    Setting,
     StreamClosed,
     StreamReset,
     TrailersReceived,
@@ -232,3 +233,87 @@ def test_output_limits_do_not_change_the_serialized_bytes(
         return bytes(output)
 
     assert serialize(amount) == serialize(None)
+
+
+def data_frame_lengths(wire: bytes) -> list[int]:
+    lengths = []
+    offset = 0
+    while offset < len(wire):
+        length = int.from_bytes(wire[offset : offset + 3], "big")
+        if wire[offset + 3] == 0:
+            lengths.append(length)
+        offset += 9 + length
+    return lengths
+
+
+@pytest.mark.parametrize(
+    ("peer_limit", "local_limit", "frame_limit"),
+    [
+        (16_384, 65_536, 16_384),
+        (1 << 20, None, 65_536),
+        (1 << 20, 1 << 20, 1 << 20),
+        (1 << 20, 1_000, 1_000),
+    ],
+    ids=["peer-default", "local-default", "peer-advertised", "local-smaller"],
+)
+@pytest.mark.parametrize("amount", [None, 4_096], ids=["unlimited", "limited"])
+def test_data_frames_use_the_smaller_frame_size_limit(
+    peer_limit: int,
+    local_limit: int | None,
+    frame_limit: int,
+    amount: int | None,
+) -> None:
+    config = (
+        Configuration()
+        if local_limit is None
+        else Configuration(max_send_data_frame_size=local_limit)
+    )
+    client = Connection(Role.CLIENT, config)
+    server = Connection(Role.SERVER)
+    client.initiate_connection()
+    server.initiate_connection(
+        {Setting.MAX_FRAME_SIZE: peer_limit, Setting.INITIAL_WINDOW_SIZE: 1 << 20},
+    )
+    server.set_local_window_size(1 << 20)
+    for _ in range(2):
+        server.receive_data(client.data_to_send())
+        client.receive_data(server.data_to_send())
+    client.events()
+    server.events()
+    payload = bytes(range(256)) * 1_000
+    stream_id = client.send_request(REQUEST)
+    client.send_data(stream_id, payload, end_stream=True)
+
+    output = bytearray()
+    while chunk := client.data_to_send(amount):
+        output += chunk
+    wire = bytes(output)
+    lengths = data_frame_lengths(wire)
+    assert sum(lengths) == len(payload)
+    assert all(length == frame_limit for length in lengths[:-1])
+    assert 0 < lengths[-1] <= frame_limit
+
+    server.receive_data(wire)
+    received = [event for event in server.events() if isinstance(event, DataReceived)]
+    assert [len(event.data) for event in received] == lengths
+    assert b"".join(event.data for event in received) == payload
+
+
+def test_spent_output_limit_leaves_the_next_data_frame_queued() -> None:
+    client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
+    client.initiate_connection()
+    server.initiate_connection(
+        {Setting.MAX_FRAME_SIZE: 1 << 20, Setting.INITIAL_WINDOW_SIZE: 1 << 20},
+    )
+    server.set_local_window_size(1 << 20)
+    for _ in range(2):
+        server.receive_data(client.data_to_send())
+        client.receive_data(server.data_to_send())
+    stream_id = client.send_request(REQUEST)
+    server.receive_data(client.data_to_send())
+    client.send_data(stream_id, b"x" * 256_000, end_stream=True)
+
+    output = client.data_to_send(65_536 + 9)
+
+    assert data_frame_lengths(output) == [65_536]
+    assert client.queued_body_size(stream_id) == 256_000 - 65_536

@@ -4,35 +4,38 @@ from __future__ import annotations
 
 import argparse
 from html import escape
-from math import ceil
 from pathlib import Path
 
 import pyperf
+from compare_h2 import SCENARIOS
 
-SCENARIOS = (
-    ("small_round_trip", "Small request/204 round trip"),
-    ("headers_32", "Header block · 32 fields"),
-    ("fragmented_5b", "Fragmented request · 5 B"),
-    ("body_32k", "Request body · 32 KiB"),
-    ("multiplexed_100", "Multiplexed batch · 100 streams"),
-)
 MULTIPLICATION_SIGN = "\N{MULTIPLICATION SIGN}"
 TABLE_START = "<!-- benchmark-table:start -->"
 TABLE_END = "<!-- benchmark-table:end -->"
 
 
-def load_results(path: Path) -> tuple[list[tuple[str, float, float]], str, str]:
+Row = tuple[str, str, float, float]
+# One small request, many small requests, and the largest bodies, where the
+# speedup is smallest.
+CHART_SCENARIOS = (
+    "consecutive_x1_empty",
+    "parallel_x10_empty",
+    "parallel_x10_res_10mb",
+)
+
+
+def load_results(path: Path) -> tuple[list[Row], str, str]:
     """Load paired means and environment details from a pyperf suite."""
     suite = pyperf.BenchmarkSuite.load(str(path))
     means = {benchmark.get_name(): benchmark.mean() for benchmark in suite}
     rows = []
-    for key, label in SCENARIOS:
+    for key, label, _ in SCENARIOS:
         try:
-            candidate = means[f"scenario/{key}/ngh2"]
-            reference = means[f"scenario/{key}/h2"]
+            candidate = means[f"http2_{key}/ngh2"]
+            reference = means[f"http2_{key}/h2"]
         except KeyError as error:
             raise ValueError(f"missing benchmark: {error.args[0]}") from None
-        rows.append((label, candidate, reference))
+        rows.append((key, label, candidate, reference))
 
     metadata = suite.get_metadata()
     _, finished = suite.get_dates()
@@ -56,102 +59,107 @@ def load_results(path: Path) -> tuple[list[tuple[str, float, float]], str, str]:
     return rows, details, h2_version
 
 
-def render_svg(
-    rows: list[tuple[str, float, float]],
-    details: str,
-    h2_version: str,
-) -> str:
-    """Render an accessible dependency-free SVG comparison chart."""
-    width = 960
-    plot_x, plot_width = 360, 530
-    row_height = 76
-    detail_lines = details.splitlines()
-    height = 128 + row_height * len(rows) + 20 * len(detail_lines)
-    speedups = [reference / candidate for _, candidate, reference in rows]
-    tick_step = max(1, ceil(max(1.0, *speedups) / 4))
-    axis_max = tick_step * ceil(max(1.0, *speedups) / tick_step)
+def render_svg(rows: list[Row], h2_version: str) -> str:
+    """Render ngh2 and h2 times for the chart scenarios as paired bars."""
+    chart = [row for row in rows if row[0] in CHART_SCENARIOS]
+    width, padding, name_width, value_width = 760, 24, 72, 96
+    group_height, bar_height, badge_width = 98, 12, 104
+    plot_x = padding + name_width
+    plot_width = width - plot_x - padding - value_width
+    height = 2 * padding + group_height * len(chart) - 32
+    reference_name = f"h2 {h2_version}"
 
+    # ngh2 and its speedup badge share the Python blue from the ngh2 logo.
     svg = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
-        '<title id="title">ngh2 and h2 Python benchmark</title>',
-        '<desc id="desc">Relative throughput for five HTTP/2 scenarios. Higher '
-        f"is faster; h2 {escape(h2_version)} is the 1.00 baseline.</desc>",
+        '<title id="title">ngh2 and h2 time per iteration</title>',
+        '<desc id="desc">'
+        + "; ".join(
+            f"{escape(label)}: ngh2 {format_time(candidate)}, "
+            f"{escape(reference_name)} {format_time(reference)}, "
+            f"{reference / candidate:.1f} times faster"
+            for _, label, candidate, reference in chart
+        )
+        + ".</desc>",
         "<style>",
-        "text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
-        ".canvas{fill:#fbfbfd}.primary{fill:#1d1d1f}.secondary{fill:#6e6e73}"
-        ".grid{stroke:#e5e5ea}",
-        ".candidate{fill:#3a6ea5}.reference{fill:#c7c7cc}",
+        "text{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,"
+        "Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums}",
+        ".card{fill:#ffffff;stroke:#d1d9e0}.rule{stroke:#eff2f5}"
+        ".primary{fill:#1f2328}.secondary{fill:#59636e}"
+        ".candidate{fill:#4b8bbe}.reference{fill:#d1d9e0}"
+        ".badge{fill:#4b8bbe;fill-opacity:0.14}.badge-text{fill:#306998}",
+        "@media (prefers-color-scheme:dark){.card{fill:#0d1117;stroke:#3d444d}"
+        ".rule{stroke:#262c36}.primary{fill:#f0f6fc}.secondary{fill:#9198a1}"
+        ".reference{fill:#3d444d}.badge{fill-opacity:0.22}"
+        ".badge-text{fill:#8ab4df}}",
         "</style>",
-        f'<rect class="canvas" width="{width}" height="{height}"/>',
-        '<text class="secondary" x="40" y="27" font-size="11" font-weight="500" '
-        'letter-spacing="1.4">PYTHON · HTTP/2</text>',
-        '<text class="primary" x="40" y="58" font-size="25" font-weight="500" '
-        'letter-spacing="-0.4">Relative throughput by scenario</text>',
-        f'<text class="secondary" x="40" y="83" font-size="13">h2 '
-        f"{escape(h2_version)} = 1.00{MULTIPLICATION_SIGN} · higher is faster · "
-        "latency per exchange</text>",
+        f'<rect class="card" x="0.5" y="0.5" width="{width - 1}" '
+        f'height="{height - 1}" rx="12"/>',
     ]
-
-    for index in range(5):
-        value = axis_max * index / 4
-        x = plot_x + plot_width * index / 4
+    for index, (_, label, candidate, reference) in enumerate(chart):
+        y = padding + index * group_height
+        longest = max(candidate, reference)
+        badge_x = width - padding - badge_width
+        if index:
+            svg.append(
+                f'<line class="rule" x1="{padding}" y1="{y - 16}" '
+                f'x2="{width - padding}" y2="{y - 16}"/>',
+            )
         svg.extend(
             [
-                f'<line class="grid" x1="{x:.1f}" y1="108" x2="{x:.1f}" '
-                f'y2="{112 + row_height * len(rows)}"/>',
-                f'<text class="secondary" x="{x:.1f}" y="102" text-anchor="middle" '
-                f'font-size="10">{value:g}{MULTIPLICATION_SIGN}</text>',
+                f'<text class="primary" x="{padding}" y="{y + 16}" font-size="14" '
+                f'font-weight="600">{escape(label)}</text>',
+                f'<rect class="badge" x="{badge_x}" y="{y}" width="{badge_width}" '
+                'height="22" rx="11"/>',
+                f'<text class="badge-text" x="{badge_x + badge_width / 2}" '
+                f'y="{y + 15}" text-anchor="middle" font-size="12" font-weight="700">'
+                f"{reference / candidate:.1f}{MULTIPLICATION_SIGN} faster</text>",
             ],
         )
-
-    for index, (label, candidate, reference) in enumerate(rows):
-        speedup = reference / candidate
-        y = 124 + index * row_height
-        reference_width = plot_width / axis_max
-        candidate_width = plot_width * speedup / axis_max
-        svg.extend(
-            [
-                f'<text class="primary" x="40" y="{y + 15}" font-size="13" '
-                f'font-weight="500">{escape(label)}</text>',
-                f'<text class="secondary" x="40" y="{y + 37}" font-size="11">'
-                f"{candidate * 1e6:.2f} µs vs {reference * 1e6:.2f} µs</text>",
-                f'<text class="secondary" x="308" y="{y + 12}" text-anchor="end" '
-                'font-size="10">ngh2</text>',
-                f'<rect class="candidate" x="{plot_x}" y="{y}" '
-                f'width="{candidate_width:.1f}" height="15" rx="7.5"/>',
-                f'<text class="primary" x="{min(plot_x + candidate_width + 10, 920):.1f}" '
-                f'y="{y + 12}" font-size="11" font-weight="500">{speedup:.1f}'
-                f"{MULTIPLICATION_SIGN}</text>",
-                f'<text class="secondary" x="308" y="{y + 35}" text-anchor="end" '
-                f'font-size="10">h2 {escape(h2_version)}</text>',
-                f'<rect class="reference" x="{plot_x}" y="{y + 23}" '
-                f'width="{reference_width:.1f}" height="10" rx="5"/>',
-            ],
+        bars = (
+            ("ngh2", candidate, "candidate"),
+            (reference_name, reference, "reference"),
         )
-
-    for index, line in enumerate(detail_lines):
-        svg.append(
-            f'<text class="secondary" x="40" y="{height - 30 + index * 17}" '
-            f'font-size="10">{escape(line)}</text>',
-        )
+        for offset, (name, seconds, style) in enumerate(bars):
+            top = y + 34 + offset * 20
+            length = max(bar_height, plot_width * seconds / longest)
+            svg.extend(
+                [
+                    f'<text class="secondary" x="{padding}" y="{top + 10}" '
+                    f'font-size="12" font-weight="500">{escape(name)}</text>',
+                    f'<rect class="{style}" x="{plot_x}" y="{top}" '
+                    f'width="{length:.1f}" height="{bar_height}" '
+                    f'rx="{bar_height / 2}"/>',
+                    f'<text class="primary" x="{plot_x + length + 8:.1f}" '
+                    f'y="{top + 10}" '
+                    f'font-size="12" font-weight="500">{format_time(seconds)}</text>',
+                ],
+            )
     svg.append("</svg>")
     return "\n".join(svg) + "\n"
 
 
+def format_time(seconds: float) -> str:
+    """Format a per-iteration time in µs, or in ms from one millisecond."""
+    if seconds < 1e-3:
+        return f"{seconds * 1e6:,.2f} µs"
+    return f"{seconds * 1e3:,.2f} ms"
+
+
 def render_table(
-    rows: list[tuple[str, float, float]],
+    rows: list[Row],
     details: str,
     h2_version: str,
 ) -> str:
-    """Render exact means as a Markdown table."""
+    """Render mean times per iteration and the speedup as a Markdown table."""
     lines = [
-        f"| Scenario | ngh2 (µs/exchange) | h2 {h2_version} (µs/exchange) | Relative throughput |",
+        f"| Scenario | ngh2 | h2 {h2_version} | ngh2 speedup |",
         "| --- | ---: | ---: | ---: |",
     ]
-    for label, candidate, reference in rows:
+    for _, label, candidate, reference in rows:
         lines.append(
-            f"| {label} | {candidate * 1e6:.2f} | {reference * 1e6:.2f} | "
+            f"| {label} | {format_time(candidate)} | {format_time(reference)} | "
             f"{reference / candidate:.1f}{MULTIPLICATION_SIGN} |",
         )
     if details:
@@ -184,7 +192,7 @@ def main() -> None:
     rows, details, h2_version = load_results(args.results)
     args.svg.parent.mkdir(parents=True, exist_ok=True)
     args.svg.write_text(
-        render_svg(rows, details, h2_version),
+        render_svg(rows, h2_version),
         encoding="utf-8",
     )
     table = render_table(rows, details, h2_version)

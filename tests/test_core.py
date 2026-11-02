@@ -11,6 +11,7 @@ from ngh2 import (
     Configuration,
     Connection,
     ConnectionStateError,
+    DataReceived,
     ErrorCode,
     NGH2Error,
     RequestReceived,
@@ -34,24 +35,34 @@ def test_free_threaded_connections_run_independently() -> None:
     if not sysconfig.get_config_var("Py_GIL_DISABLED"):
         pytest.skip("requires a free-threaded CPython build")
 
-    def build_request(_: int) -> bytes:
-        connection = Connection(Role.CLIENT)
-        connection.initiate_connection()
-        connection.send_request(
+    def upload(index: int) -> bytes:
+        client, server = Connection(Role.CLIENT), Connection(Role.SERVER)
+        client.initiate_connection()
+        server.initiate_connection()
+        for _ in range(2):
+            server.receive_data(client.data_to_send())
+            client.receive_data(server.data_to_send())
+        stream_id = client.send_request(
             [
-                (b":method", b"GET"),
+                (b":method", b"POST"),
                 (b":scheme", b"https"),
                 (b":authority", b"example.com"),
                 (b":path", b"/"),
             ],
-            end_stream=True,
         )
-        return connection.data_to_send()
+        client.send_data(stream_id, bytes([index]) * 50_000, end_stream=True)
+        wire = client.data_to_send()
+        # Uneven reads split DATA frames across receive_data() calls.
+        for offset in range(0, len(wire), 4_093):
+            server.receive_data(wire[offset : offset + 4_093])
+        return b"".join(
+            event.data for event in server.events() if isinstance(event, DataReceived)
+        )
 
     with ThreadPoolExecutor(max_workers=4) as executor:
-        output = list(executor.map(build_request, range(64)))
+        bodies = list(executor.map(upload, range(64)))
 
-    assert all(output)
+    assert bodies == [bytes([index]) * 50_000 for index in range(64)]
 
 
 class TestCore:
@@ -108,6 +119,8 @@ class TestCore:
             Configuration(max_settings=0),
             Configuration(max_settings=-1),
             Configuration(stream_reset_rate_limit=(1 << 64, 1)),
+            Configuration(max_send_data_frame_size=0),
+            Configuration(max_send_data_frame_size=1 << 24),
         ],
         ids=[
             "negative-u32",
@@ -115,6 +128,8 @@ class TestCore:
             "zero-settings-limit",
             "negative-settings-limit",
             "overflow-u64",
+            "zero-data-frame-size",
+            "oversized-data-frame",
         ],
     )
     def test_connection_rejects_out_of_range_native_options(self, configuration):

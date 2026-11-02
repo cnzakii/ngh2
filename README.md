@@ -26,9 +26,9 @@ calls into bytes to send; your code decides how and when those bytes move.
 
 ## Why ngh2
 
-- **Fast.** ngh2 completes HTTP/2 exchanges at least 20× faster than the
-  pure-Python [h2](https://h2.readthedocs.io/) in every
-  [measured scenario](https://github.com/cnzakii/ngh2#performance).
+- **Fast.** ngh2 completes HTTP/2 exchanges up to 30× faster than the
+  pure-Python [h2](https://h2.readthedocs.io/). See
+  [every measured scenario](https://github.com/cnzakii/ngh2#performance).
 - **Proven protocol engine.** Framing, HPACK, flow control, and protocol
   validation come from [libnghttp2](https://nghttp2.org/documentation/), the
   HTTP/2 implementation behind curl, Node.js, and Apache httpd. CI also runs
@@ -121,21 +121,33 @@ connections can run concurrently.
 
 ## Performance
 
-Each scenario runs complete exchanges through the public APIs of ngh2 and h2,
-measured with `pyperf`. The timer covers stream state, HPACK, flow-control
-accounting, event construction, and frame serialization; connections are set
-up once outside it.
+![ngh2 and h2 time per iteration in three scenarios][benchmark-chart]
+
+The chart shows three of the scenarios; the table lists all of them. Each
+scenario runs complete HTTP/2 exchanges through the public APIs of ngh2 and h2,
+measured with `pyperf`. Times are per iteration: one request, or ten
+concurrent requests on one connection, with every response body read. Writes
+are separate `send_data()` calls for one request body. Max window raises every
+flow-control window to 2³¹−1, the protocol maximum; other scenarios keep the
+65,535-byte default. Each library talks to itself in memory and reads its
+peer's output in 64 KiB pieces. Work that h2 leaves to its caller, such as
+splitting bodies to the window and acknowledging received data, is timed with
+it.
 
 <!-- benchmark-table:start -->
-| Scenario | ngh2 (µs/exchange) | h2 4.4.1 (µs/exchange) | Relative throughput |
+| Scenario | ngh2 | h2 4.4.1 | ngh2 speedup |
 | --- | ---: | ---: | ---: |
-| Small request/204 round trip | 1.96 | 60.78 | 30.9× |
-| Header block · 32 fields | 4.16 | 146.48 | 35.2× |
-| Fragmented request · 5 B | 2.34 | 64.37 | 27.5× |
-| Request body · 32 KiB | 5.81 | 119.39 | 20.5× |
-| Multiplexed batch · 100 streams | 1.32 | 48.32 | 36.7× |
+| 1 request · no body | 2.60 µs | 65.61 µs | 25.2× |
+| 1 request · 10 B upload | 3.35 µs | 83.46 µs | 24.9× |
+| 1 request · 100 KiB upload | 13.51 µs | 249.68 µs | 18.5× |
+| 10 concurrent requests · no body | 16.94 µs | 499.58 µs | 29.5× |
+| 10 concurrent · 10 MiB upload each · max window | 17.50 ms | 127.74 ms | 7.3× |
+| 10 concurrent · 100 writes of 10 KiB upload each | 931.49 µs | 18.77 ms | 20.1× |
+| 10 concurrent · 100 writes of 10 KiB upload each · max window | 1.49 ms | 14.48 ms | 9.7× |
+| 10 concurrent · 1 MiB download each · max window | 1.44 ms | 13.11 ms | 9.1× |
+| 10 concurrent · 10 MiB download each · max window | 17.58 ms | 126.11 ms | 7.2× |
 
-_Environment: ngh2 0.4.0 · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-10-29_
+_Environment: ngh2 0.4.0 · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-11-02_
 <!-- benchmark-table:end -->
 
 These are protocol-layer measurements. They exclude sockets, TLS, event-loop
@@ -156,6 +168,7 @@ guidance.
 ngh2 is MIT licensed. Distributed wheels also contain libnghttp2 under its MIT
 license; both license texts are included in every distribution.
 
+[benchmark-chart]: https://raw.githubusercontent.com/cnzakii/ngh2/main/docs/assets/python-benchmark.svg
 [benchmark-results]: https://github.com/cnzakii/ngh2/blob/main/docs/assets/python-benchmark.json
 [benchmark-script]: https://github.com/cnzakii/ngh2/blob/main/benchmarks/compare_h2.py
 [contributing-guide]: https://github.com/cnzakii/ngh2/blob/main/CONTRIBUTING.md

@@ -1,10 +1,6 @@
 # cython: embedsignature=True, freethreading_compatible=True, language_level=3
 
-from cpython.bytearray cimport (
-    PyByteArray_AS_STRING,
-    PyByteArray_GET_SIZE,
-    PyByteArray_Resize,
-)
+from cpython.bytearray cimport PyByteArray_AS_STRING
 from cpython.buffer cimport (
     PyBUF_CONTIG_RO,
     Py_buffer,
@@ -19,6 +15,7 @@ from cpython.bytes cimport (
 )
 from cpython.long cimport PyLong_AsLongLongAndOverflow
 from cpython.number cimport PyNumber_Index as integer_index
+from cpython.object cimport PyObject
 from libc.stdint cimport int32_t, uint8_t, uint32_t, uint64_t
 from libc.stdlib cimport free, malloc
 from libc.string cimport memcpy, memset
@@ -62,6 +59,17 @@ from .exceptions import (
     StreamUnavailableError,
 )
 from .types import NeverIndexedHeader, Priority
+
+
+cdef extern from "Python.h":
+    # Raw forms let output grow in place while the connection is its only owner.
+    PyObject *_new_bytes "PyBytes_FromStringAndSize"(
+        const char *, Py_ssize_t
+    ) except NULL
+    int _PyBytes_Resize(PyObject **, Py_ssize_t) except -1
+    char *_bytes_buffer "PyBytes_AS_STRING"(PyObject *)
+    Py_ssize_t _bytes_size "PyBytes_GET_SIZE"(PyObject *)
+    void Py_XDECREF(PyObject *)
 
 
 _DEFAULT_PING_OPAQUE_DATA = bytes(8)
@@ -127,6 +135,10 @@ cdef class _BodySource:
         self.trailers = None
 
 
+# Configuration is frozen, so connections can share the default.
+_DEFAULT_CONFIGURATION = Configuration()
+
+
 cdef class Connection:
     """One client or server endpoint's HTTP/2 protocol state.
 
@@ -151,7 +163,8 @@ cdef class Connection:
     cdef readonly object config
     cdef bint _server
     cdef _nghttp2.nghttp2_session *_session
-    cdef bytearray _output
+    # Owned bytes object returned by data_to_send(); NULL until output starts.
+    cdef PyObject *_output
     cdef Py_ssize_t _output_size
     cdef Py_ssize_t _output_remaining
     cdef object _callback_error
@@ -173,7 +186,12 @@ cdef class Connection:
     cdef size_t _queued_body_size
     cdef list _current_headers
     cdef size_t _current_header_size
-    cdef dict _data_chunks
+    cdef uint32_t _max_send_data_frame_size
+    # HTTP/2 frames do not interleave, so at most one DATA payload is open.
+    cdef bytes _data_payload
+    cdef Py_ssize_t _data_size
+    cdef size_t _data_frame_length
+    cdef int32_t _data_stream_id
     cdef set _responses
     cdef dict _unconsumed
     cdef dict _local_stream_errors
@@ -181,7 +199,7 @@ cdef class Connection:
 
     def __cinit__(self):
         self._session = NULL
-        self._output = None
+        self._output = NULL
         self._output_remaining = 0
         self._callback_error = None
         self._initialized = False
@@ -198,7 +216,7 @@ cdef class Connection:
         self._queued_body_size = 0
         self._current_headers = []
         self._current_header_size = 0
-        self._data_chunks = {}
+        self._data_payload = None
         self._responses = set()
         self._unconsumed = {}
         self._local_stream_errors = {}
@@ -215,7 +233,7 @@ cdef class Connection:
         if not isinstance(role, Role):
             raise TypeError("role must be a Role")
         if config is None:
-            config = Configuration()
+            config = _DEFAULT_CONFIGURATION
         elif not isinstance(config, Configuration):
             raise TypeError("config must be a Configuration")
 
@@ -253,6 +271,7 @@ cdef class Connection:
     def __dealloc__(self):
         if self._session != NULL:
             _nghttp2.nghttp2_session_del(self._session)
+        Py_XDECREF(self._output)
 
     def initiate_connection(self, settings=None):
         """Submit the initial SETTINGS frame.
@@ -444,7 +463,6 @@ cdef class Connection:
         if limit == 0 or not self._active:
             return b""
 
-        self._output = bytearray()
         self._output_size = 0
         self._output_remaining = limit
         self._callback_error = None
@@ -453,14 +471,17 @@ cdef class Connection:
             self._raise_callback_or_native(result)
             if self._closing:
                 self._update_terminal_state()
-            output = PyBytes_FromStringAndSize(
-                PyByteArray_AS_STRING(self._output), self._output_size,
-            )
+            if self._output == NULL:
+                output = b""
+            else:
+                _PyBytes_Resize(&self._output, self._output_size)
+                output = <bytes>self._output
+                Py_XDECREF(self._output)
+                self._output = NULL
         except BaseException:
             # Native output has advanced; lost bytes cannot be regenerated.
             self._fail()
             raise
-        self._output = None
         self._output_remaining = 0
         return output
 
@@ -1104,7 +1125,8 @@ cdef class Connection:
         if not isinstance(priority, Priority):
             raise TypeError("priority must be a Priority")
         native_priority.urgency = _uint32(priority.urgency, "priority.urgency")
-        native_priority.inc = priority.incremental
+        # libnghttp2 accepts only 0 or 1 and would keep just the lowest bit.
+        native_priority.inc = 1 if priority.incremental else 0
         self._require_active()
         if not self._server:
             raise ConnectionStateError(
@@ -1447,7 +1469,8 @@ cdef class Connection:
         if self._session != NULL:
             _nghttp2.nghttp2_session_del(self._session)
             self._session = NULL
-        self._output = None
+        Py_XDECREF(self._output)
+        self._output = NULL
         self._output_remaining = 0
         self._callback_error = None
         self._discard_pending_state()
@@ -1463,7 +1486,8 @@ cdef class Connection:
         self._queued_body_size = 0
         self._current_headers.clear()
         self._current_header_size = 0
-        self._data_chunks.clear()
+        self._data_payload = None
+        self._data_size = 0
         self._responses.clear()
         self._unconsumed.clear()
         self._local_stream_errors.clear()
@@ -1492,6 +1516,12 @@ cdef void _configure_callbacks(
     """Register the fixed callbacks used by every connection."""
     _nghttp2.nghttp2_session_callbacks_set_send_callback2(callbacks, _collect_output)
     _nghttp2.nghttp2_session_callbacks_set_send_data_callback(callbacks, _send_body)
+    _nghttp2.nghttp2_session_callbacks_set_data_source_read_length_callback2(
+        callbacks, _data_frame_length,
+    )
+    _nghttp2.nghttp2_session_callbacks_set_on_begin_frame_callback(
+        callbacks, _begin_frame,
+    )
     _nghttp2.nghttp2_session_callbacks_set_on_begin_headers_callback(
         callbacks, _begin_headers,
     )
@@ -1558,6 +1588,10 @@ cdef void _apply_configuration(
         config.max_continuations,
         "max_continuations",
     )
+    cdef uint32_t max_send_data_frame_size = _uint32(
+        config.max_send_data_frame_size,
+        "max_send_data_frame_size",
+    )
     cdef uint64_t reset_burst
     cdef uint64_t reset_rate
     cdef uint64_t glitch_burst
@@ -1589,8 +1623,12 @@ cdef void _apply_configuration(
         glitch_rate_value,
         "glitch_rate_limit rate",
     )
+    # RFC 9113 Section 4.2: a frame payload is at most 2**24 - 1 bytes.
+    if not 1 <= max_send_data_frame_size <= 0xFFFFFF:
+        raise ValueError("max_send_data_frame_size is out of range")
     # Keep validated values so native callbacks never invoke configuration code.
     connection._auto_window_update = auto_window_update
+    connection._max_send_data_frame_size = max_send_data_frame_size
     connection._max_settings = max_settings
     connection._max_inbound_header_list_size = _nonnegative_size(
         config.max_inbound_header_list_size,
@@ -1944,11 +1982,17 @@ cdef void _random_bytes(uint8_t *destination, size_t length) noexcept:
 
 
 cdef char *_reserve_output(Connection connection, size_t length) except NULL:
-    """Return space for more output, growing the staging buffer geometrically."""
+    """Return space for more output, growing the returned bytes geometrically.
+
+    The bytes object is private to the connection until data_to_send() trims
+    it to the written size and returns it, so no final copy is needed.
+    """
     cdef Py_ssize_t used = connection._output_size
-    cdef Py_ssize_t capacity = PyByteArray_GET_SIZE(connection._output)
+    cdef Py_ssize_t capacity = 0
     cdef Py_ssize_t target
 
+    if connection._output != NULL:
+        capacity = _bytes_size(connection._output)
     if length > <size_t>(((<size_t>-1) >> 1) - <size_t>used):
         raise MemoryError("outbound data is too large")
     target = used + <Py_ssize_t>length
@@ -1956,9 +2000,13 @@ cdef char *_reserve_output(Connection connection, size_t length) except NULL:
         # Doubling a capacity this large could overflow Py_ssize_t.
         if capacity < (((<size_t>-1) >> 2)):
             target = max(target, 2 * capacity, 4096)
-        PyByteArray_Resize(connection._output, target)
+        if connection._output == NULL:
+            connection._output = _new_bytes(NULL, target)
+        else:
+            # On failure this releases the buffer and leaves NULL behind.
+            _PyBytes_Resize(&connection._output, target)
     connection._output_size = used + <Py_ssize_t>length
-    return PyByteArray_AS_STRING(connection._output) + used
+    return _bytes_buffer(connection._output) + used
 
 
 cdef _nghttp2.nghttp2_ssize _collect_output(
@@ -2054,6 +2102,37 @@ cdef int _send_body(
         return _callback_failed(connection, error)
 
 
+cdef _nghttp2.nghttp2_ssize _data_frame_length(
+    _nghttp2.nghttp2_session *session,
+    uint8_t frame_type,
+    int32_t stream_id,
+    int32_t session_remote_window_size,
+    int32_t stream_remote_window_size,
+    uint32_t remote_max_frame_size,
+    void *user_data,
+) noexcept:
+    """Size DATA frames up to the configured and peer-advertised limits.
+
+    libnghttp2 otherwise caps DATA payloads at 16 KiB whatever the peer allows,
+    and applies flow-control windows to the returned length itself. It sizes
+    its frame buffer from this length before reading the body, so the queued
+    body also bounds it; 1 still lets an empty queue defer or end the stream.
+    """
+    cdef Connection connection = <Connection>user_data
+    cdef size_t length = min(
+        connection._max_send_data_frame_size, remote_max_frame_size,
+    )
+    cdef _BodySource body
+
+    try:
+        body = connection._bodies.get(stream_id)
+    except BaseException as error:
+        return _callback_failed(connection, error)
+    # Bodies leave the map only when their stream or the session ends, after
+    # which libnghttp2 sends no DATA; _read_body reports any other gap.
+    return length if body is None else max(1, min(length, body.queued_size))
+
+
 cdef _nghttp2.nghttp2_ssize _read_body(
     _nghttp2.nghttp2_session *session,
     int32_t stream_id,
@@ -2077,6 +2156,9 @@ cdef _nghttp2.nghttp2_ssize _read_body(
     cdef _nghttp2.nghttp2_nv *native_headers = NULL
     cdef int result
 
+    if connection._output_remaining == 0:
+        # The output limit is spent; leave the body queued for the next call.
+        return _nghttp2.NGHTTP2_ERR_PAUSE
     try:
         body = connection._bodies[stream_id]
         copied = min(length, body.queued_size)
@@ -2187,6 +2269,61 @@ cdef int _invalid_header(
     return _nghttp2.NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE
 
 
+cdef void _discard_data_payload(Connection connection) except *:
+    """Drop an unpublished DATA payload and release its flow-control credit.
+
+    libnghttp2 consumes ignored DATA itself, but bytes already handed to
+    _data_chunk count against the connection window until the binding
+    consumes them. Without automatic updates nobody else can.
+    """
+    cdef size_t size = connection._data_size
+    cdef int result
+
+    connection._data_payload = None
+    connection._data_size = 0
+    if size and not connection._auto_window_update:
+        result = _nghttp2.nghttp2_session_consume_connection(
+            connection._session, size,
+        )
+        if result < 0:
+            _raise_nghttp2_error(result)
+
+
+cdef int _begin_frame(
+    _nghttp2.nghttp2_session *session,
+    const _nghttp2.nghttp2_frame_hd *frame_header,
+    void *user_data,
+) noexcept:
+    """Allocate a DATA payload once, before its fragments arrive.
+
+    libnghttp2 calls this only after checking the length against the local
+    SETTINGS_MAX_FRAME_SIZE and skips DATA it will ignore. A frame header alone
+    must not reserve more than the peer may send, so the allocation is also
+    bounded by the receive windows.
+    """
+    cdef Connection connection = <Connection>user_data
+    cdef size_t length = frame_header.length
+    cdef int32_t window
+
+    if frame_header.type != _nghttp2.NGHTTP2_DATA:
+        return 0
+    try:
+        _discard_data_payload(connection)
+        window = min(
+            _nghttp2.nghttp2_session_get_local_window_size(session),
+            _nghttp2.nghttp2_session_get_stream_local_window_size(
+                session, frame_header.stream_id,
+            ),
+        )
+        length = min(length, <size_t>max(window, 0))
+        connection._data_payload = PyBytes_FromStringAndSize(NULL, length)
+        connection._data_frame_length = frame_header.length
+        connection._data_stream_id = frame_header.stream_id
+        return 0
+    except BaseException as error:
+        return _callback_failed(connection, error)
+
+
 cdef int _data_chunk(
     _nghttp2.nghttp2_session *session,
     uint8_t flags,
@@ -2195,34 +2332,44 @@ cdef int _data_chunk(
     size_t length,
     void *user_data,
 ) noexcept:
-    """Collect DATA fragments until the complete frame callback arrives."""
+    """Copy one DATA fragment into the payload allocated for its frame."""
     cdef Connection connection = <Connection>user_data
-    cdef object accumulator
-    cdef bytearray chunks
-    cdef Py_ssize_t current_size
+    cdef bytes payload = connection._data_payload
+    cdef bytes grown
+    cdef size_t needed
+    cdef size_t capacity
 
     try:
-        accumulator = connection._data_chunks.get(stream_id)
-        if accumulator is None:
-            connection._data_chunks[stream_id] = PyBytes_FromStringAndSize(
-                <const char *>data,
-                length,
+        needed = <size_t>connection._data_size + length
+        if (
+            payload is None
+            or stream_id != connection._data_stream_id
+            or needed > connection._data_frame_length
+        ):
+            raise InternalError("DATA fragment does not fit an open frame")
+        if needed > <size_t>PyBytes_GET_SIZE(payload):
+            # The windows bounded the allocation when the frame began; a
+            # WINDOW_UPDATE queued mid-frame can admit the rest of a frame that
+            # was longer than they were then. Doubling keeps the reservation
+            # proportional to what has arrived rather than to the header.
+            capacity = min(
+                connection._data_frame_length,
+                max(needed, 2 * <size_t>PyBytes_GET_SIZE(payload)),
             )
-            return 0
-
-        if isinstance(accumulator, bytes):
-            chunks = bytearray(accumulator)
-            connection._data_chunks[stream_id] = chunks
-        else:
-            chunks = accumulator
-
-        current_size = PyByteArray_GET_SIZE(chunks)
-        PyByteArray_Resize(chunks, current_size + length)
+            grown = PyBytes_FromStringAndSize(NULL, capacity)
+            memcpy(
+                PyBytes_AS_STRING(grown),
+                PyBytes_AS_STRING(payload),
+                connection._data_size,
+            )
+            connection._data_payload = payload = grown
+        # The payload is not visible to Python code until the frame completes.
         memcpy(
-            PyByteArray_AS_STRING(chunks) + current_size,
+            PyBytes_AS_STRING(payload) + connection._data_size,
             data,
             length,
         )
+        connection._data_size += length
         return 0
     except BaseException as error:
         return _callback_failed(connection, error)
@@ -2288,16 +2435,17 @@ cdef inline void _data_frame_received(
     const _nghttp2.nghttp2_frame *frame,
 ):
     """Publish one complete DATA frame and update receive accounting."""
-    cdef bytes payload
-    cdef object accumulator
+    cdef bytes payload = connection._data_payload
+    cdef Py_ssize_t size = connection._data_size
 
-    accumulator = connection._data_chunks.pop(frame.hd.stream_id, None)
-    if accumulator is None:
+    # Published bytes are accounted in _unconsumed, never discarded again.
+    connection._data_payload = None
+    connection._data_size = 0
+    if payload is None or size == 0:
         payload = b""
-    elif isinstance(accumulator, bytes):
-        payload = accumulator
-    else:
-        payload = bytes(accumulator)
+    elif size != PyBytes_GET_SIZE(payload):
+        # Padding or a larger window-bounded allocation is not application data.
+        payload = PyBytes_FromStringAndSize(PyBytes_AS_STRING(payload), size)
     if payload and not connection._auto_window_update:
         connection._unconsumed[frame.hd.stream_id] = (
             connection._unconsumed.get(frame.hd.stream_id, 0)
@@ -2496,7 +2644,8 @@ cdef int _stream_closed(
         body = connection._bodies.pop(stream_id, None)
         if body is not None:
             connection._queued_body_size -= body.queued_size
-        connection._data_chunks.pop(stream_id, None)
+        if connection._data_stream_id == stream_id:
+            _discard_data_payload(connection)
         connection._responses.discard(stream_id)
         connection._deferred_resets.pop(stream_id, None)
         if connection._local_stream_errors:

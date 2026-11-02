@@ -152,6 +152,13 @@ cdef extern from "nghttp2/nghttp2.h":
         nghttp2_data_source *, void *
     ) noexcept
 
+    ctypedef nghttp2_ssize (*nghttp2_data_source_read_length_callback2)(
+        nghttp2_session *, uint8_t, int32_t, int32_t, int32_t, uint32_t, void *
+    ) noexcept
+
+    ctypedef int (*nghttp2_on_begin_frame_callback)(
+        nghttp2_session *, const nghttp2_frame_hd *, void *
+    ) noexcept
     ctypedef int (*nghttp2_on_frame_recv_callback)(
         nghttp2_session *, const nghttp2_frame *, void *
     ) noexcept
@@ -185,6 +192,7 @@ cdef extern from "nghttp2/nghttp2.h":
         NGHTTP2_ERR_NOMEM
         NGHTTP2_ERR_CALLBACK_FAILURE
         NGHTTP2_ERR_DEFERRED
+        NGHTTP2_ERR_PAUSE
         NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE
         NGHTTP2_ERR_INVALID_ARGUMENT
         NGHTTP2_ERR_PROTO
@@ -239,6 +247,12 @@ cdef extern from "nghttp2/nghttp2.h":
     )
     void nghttp2_session_callbacks_set_on_frame_recv_callback(
         nghttp2_session_callbacks *, nghttp2_on_frame_recv_callback
+    )
+    void nghttp2_session_callbacks_set_data_source_read_length_callback2(
+        nghttp2_session_callbacks *, nghttp2_data_source_read_length_callback2
+    )
+    void nghttp2_session_callbacks_set_on_begin_frame_callback(
+        nghttp2_session_callbacks *, nghttp2_on_begin_frame_callback
     )
     void nghttp2_session_callbacks_set_on_data_chunk_recv_callback(
         nghttp2_session_callbacks *, nghttp2_on_data_chunk_recv_callback
@@ -361,6 +375,7 @@ cdef extern from "nghttp2/nghttp2.h":
         const uint8_t *, size_t
     )
     int nghttp2_session_consume(nghttp2_session *, int32_t, size_t)
+    int nghttp2_session_consume_connection(nghttp2_session *, size_t)
     int nghttp2_session_want_read(nghttp2_session *)
     int nghttp2_session_want_write(nghttp2_session *)
     uint32_t nghttp2_session_get_next_stream_id(nghttp2_session *)
