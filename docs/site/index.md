@@ -62,11 +62,8 @@ asyncio, threads, Trio, or in-memory tests.
 
 ### Benchmark details
 
-![ngh2 and h2 time per iteration in three scenarios](https://raw.githubusercontent.com/cnzakii/ngh2/main/docs/assets/python-benchmark.svg)
-
-The chart shows three of the scenarios; the table lists all of them. Each
-scenario runs complete HTTP/2 exchanges through the public APIs of ngh2 and h2,
-measured with `pyperf`. Times are per iteration: one request, or ten
+Each scenario runs complete HTTP/2 exchanges through the public APIs of ngh2
+and h2, measured with `pyperf`. Times are per iteration: one request, or ten
 concurrent requests on one connection, with every response body read. Writes
 are separate `send_data()` calls for one request body. Max window raises every
 flow-control window to 2³¹−1, the protocol maximum; other scenarios keep the

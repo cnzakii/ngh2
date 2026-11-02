@@ -4,6 +4,8 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-02
+
 ### Added
 
 - `Configuration.max_send_data_frame_size` limits each outbound DATA frame,
