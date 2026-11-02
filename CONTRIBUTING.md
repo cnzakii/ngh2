@@ -93,7 +93,6 @@ uv run --locked python benchmarks/compare_h2.py \
 cp build/python-benchmark.json docs/assets/python-benchmark.json
 uv run --locked python benchmarks/render_results.py \
   docs/assets/python-benchmark.json \
-  --svg docs/assets/python-benchmark.svg \
   --table docs/assets/python-benchmark.md \
   --readme README.md
 ```

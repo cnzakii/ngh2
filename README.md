@@ -121,11 +121,8 @@ connections can run concurrently.
 
 ## Performance
 
-![ngh2 and h2 time per iteration in three scenarios][benchmark-chart]
-
-The chart shows three of the scenarios; the table lists all of them. Each
-scenario runs complete HTTP/2 exchanges through the public APIs of ngh2 and h2,
-measured with `pyperf`. Times are per iteration: one request, or ten
+Each scenario runs complete HTTP/2 exchanges through the public APIs of ngh2
+and h2, measured with `pyperf`. Times are per iteration: one request, or ten
 concurrent requests on one connection, with every response body read. Writes
 are separate `send_data()` calls for one request body. Max window raises every
 flow-control window to 2³¹−1, the protocol maximum; other scenarios keep the
@@ -137,17 +134,17 @@ it.
 <!-- benchmark-table:start -->
 | Scenario | ngh2 | h2 4.4.1 | ngh2 speedup |
 | --- | ---: | ---: | ---: |
-| 1 request · no body | 2.60 µs | 65.61 µs | 25.2× |
-| 1 request · 10 B upload | 3.35 µs | 83.46 µs | 24.9× |
-| 1 request · 100 KiB upload | 13.51 µs | 249.68 µs | 18.5× |
-| 10 concurrent requests · no body | 16.94 µs | 499.58 µs | 29.5× |
-| 10 concurrent · 10 MiB upload each · max window | 17.50 ms | 127.74 ms | 7.3× |
-| 10 concurrent · 100 writes of 10 KiB upload each | 931.49 µs | 18.77 ms | 20.1× |
-| 10 concurrent · 100 writes of 10 KiB upload each · max window | 1.49 ms | 14.48 ms | 9.7× |
-| 10 concurrent · 1 MiB download each · max window | 1.44 ms | 13.11 ms | 9.1× |
-| 10 concurrent · 10 MiB download each · max window | 17.58 ms | 126.11 ms | 7.2× |
+| 1 request · no body | 2.52 µs | 64.42 µs | 25.5× |
+| 1 request · 10 B upload | 3.26 µs | 82.56 µs | 25.3× |
+| 1 request · 100 KiB upload | 13.46 µs | 246.22 µs | 18.3× |
+| 10 concurrent requests · no body | 16.77 µs | 495.19 µs | 29.5× |
+| 10 concurrent · 10 MiB upload each · max window | 17.64 ms | 126.28 ms | 7.2× |
+| 10 concurrent · 100 writes of 10 KiB upload each | 924.86 µs | 18.75 ms | 20.3× |
+| 10 concurrent · 100 writes of 10 KiB upload each · max window | 1.44 ms | 14.44 ms | 10.0× |
+| 10 concurrent · 1 MiB download each · max window | 1.40 ms | 13.16 ms | 9.4× |
+| 10 concurrent · 10 MiB download each · max window | 17.56 ms | 125.88 ms | 7.2× |
 
-_Environment: ngh2 0.4.0 · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-11-02_
+_Environment: ngh2 0.5.0 · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-11-02_
 <!-- benchmark-table:end -->
 
 These are protocol-layer measurements. They exclude sockets, TLS, event-loop
@@ -168,7 +165,6 @@ guidance.
 ngh2 is MIT licensed. Distributed wheels also contain libnghttp2 under its MIT
 license; both license texts are included in every distribution.
 
-[benchmark-chart]: https://raw.githubusercontent.com/cnzakii/ngh2/main/docs/assets/python-benchmark.svg
 [benchmark-results]: https://github.com/cnzakii/ngh2/blob/main/docs/assets/python-benchmark.json
 [benchmark-script]: https://github.com/cnzakii/ngh2/blob/main/benchmarks/compare_h2.py
 [contributing-guide]: https://github.com/cnzakii/ngh2/blob/main/CONTRIBUTING.md
