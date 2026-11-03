@@ -190,7 +190,6 @@ cdef class Connection:
     # HTTP/2 frames do not interleave, so at most one DATA payload is open.
     cdef bytes _data_payload
     cdef Py_ssize_t _data_size
-    cdef size_t _data_frame_length
     cdef int32_t _data_stream_id
     cdef set _responses
     cdef dict _unconsumed
@@ -2297,27 +2296,20 @@ cdef int _begin_frame(
     """Allocate a DATA payload once, before its fragments arrive.
 
     libnghttp2 calls this only after checking the length against the local
-    SETTINGS_MAX_FRAME_SIZE and skips DATA it will ignore. A frame header alone
-    must not reserve more than the peer may send, so the allocation is also
-    bounded by the receive windows.
+    SETTINGS_MAX_FRAME_SIZE and skips DATA it will ignore. It also charges the
+    whole length to both receive windows first and closes the connection with
+    FLOW_CONTROL_ERROR if the frame does not fit, so a frame header alone can
+    reserve no more than the peer may send.
     """
     cdef Connection connection = <Connection>user_data
-    cdef size_t length = frame_header.length
-    cdef int32_t window
 
     if frame_header.type != _nghttp2.NGHTTP2_DATA:
         return 0
     try:
         _discard_data_payload(connection)
-        window = min(
-            _nghttp2.nghttp2_session_get_local_window_size(session),
-            _nghttp2.nghttp2_session_get_stream_local_window_size(
-                session, frame_header.stream_id,
-            ),
+        connection._data_payload = PyBytes_FromStringAndSize(
+            NULL, frame_header.length,
         )
-        length = min(length, <size_t>max(window, 0))
-        connection._data_payload = PyBytes_FromStringAndSize(NULL, length)
-        connection._data_frame_length = frame_header.length
         connection._data_stream_id = frame_header.stream_id
         return 0
     except BaseException as error:
@@ -2335,34 +2327,15 @@ cdef int _data_chunk(
     """Copy one DATA fragment into the payload allocated for its frame."""
     cdef Connection connection = <Connection>user_data
     cdef bytes payload = connection._data_payload
-    cdef bytes grown
-    cdef size_t needed
-    cdef size_t capacity
 
     try:
-        needed = <size_t>connection._data_size + length
         if (
             payload is None
             or stream_id != connection._data_stream_id
-            or needed > connection._data_frame_length
+            or <size_t>connection._data_size + length
+            > <size_t>PyBytes_GET_SIZE(payload)
         ):
             raise InternalError("DATA fragment does not fit an open frame")
-        if needed > <size_t>PyBytes_GET_SIZE(payload):
-            # The windows bounded the allocation when the frame began; a
-            # WINDOW_UPDATE queued mid-frame can admit the rest of a frame that
-            # was longer than they were then. Doubling keeps the reservation
-            # proportional to what has arrived rather than to the header.
-            capacity = min(
-                connection._data_frame_length,
-                max(needed, 2 * <size_t>PyBytes_GET_SIZE(payload)),
-            )
-            grown = PyBytes_FromStringAndSize(NULL, capacity)
-            memcpy(
-                PyBytes_AS_STRING(grown),
-                PyBytes_AS_STRING(payload),
-                connection._data_size,
-            )
-            connection._data_payload = payload = grown
         # The payload is not visible to Python code until the frame completes.
         memcpy(
             PyBytes_AS_STRING(payload) + connection._data_size,
@@ -2444,7 +2417,7 @@ cdef inline void _data_frame_received(
     if payload is None or size == 0:
         payload = b""
     elif size != PyBytes_GET_SIZE(payload):
-        # Padding or a larger window-bounded allocation is not application data.
+        # Padding is not application data.
         payload = PyBytes_FromStringAndSize(PyBytes_AS_STRING(payload), size)
     if payload and not connection._auto_window_update:
         connection._unconsumed[frame.hd.stream_id] = (

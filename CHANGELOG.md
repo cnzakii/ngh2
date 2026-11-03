@@ -4,6 +4,19 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the vendored libnghttp2 dependency to v1.71.0.
+- A DATA frame longer than the receive window now closes the connection with
+  `FLOW_CONTROL_ERROR` as soon as its frame header arrives. Previously it was
+  accepted if window updates queued while the frame arrived made room for the
+  rest of it.
+- `receive_data()` raises `DenialOfServiceError` when more than 5,000 frames
+  other than DATA are waiting to be sent, including requests waiting for a
+  concurrent-stream slot.
+- Trailers received on a CONNECT or extended CONNECT stream now reset the
+  stream with `PROTOCOL_ERROR`.
+
 ## [0.5.0] - 2026-11-02
 
 ### Added

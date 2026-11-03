@@ -1,4 +1,4 @@
-"""HTTP/2 rules the pinned libnghttp2 v1.70.0 does not follow.
+"""HTTP/2 rules the pinned libnghttp2 v1.71.0 does not follow.
 
 ngh2 leaves these to libnghttp2 rather than working around them. Each test
 asserts the RFC behavior and is a strict expected failure, so a dependency
