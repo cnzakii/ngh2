@@ -32,12 +32,12 @@ h2spec -h 127.0.0.1 -p PORT
 
 ## Known libnghttp2 defects
 
-`test_upstream.py` records HTTP/2 rules that the pinned libnghttp2 v1.70.0
+`test_upstream.py` records HTTP/2 rules that the pinned libnghttp2 v1.71.0
 does not follow. ngh2 does not work around them in the binding; each test is a
 strict expected failure, so a dependency update that fixes one requires
 removing its marker.
 
-| Rule | libnghttp2 v1.70.0 behavior |
+| Rule | libnghttp2 v1.71.0 behavior |
 |---|---|
 | [RFC 9113 §6.3](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.3) | [Ignores PRIORITY on stream 0](https://github.com/nghttp2/nghttp2/blob/85e300c79fb6dbcfa9c1013215c8710c1c2cd3d2/lib/nghttp2_session.c#L5697-L5724) |
 | [RFC 9218 §7.1](https://www.rfc-editor.org/rfc/rfc9218.html#section-7.1) | [Accepts PRIORITY_UPDATE for stream 0](https://github.com/nghttp2/nghttp2/blob/85e300c79fb6dbcfa9c1013215c8710c1c2cd3d2/lib/nghttp2_session.c#L4860-L4925) |

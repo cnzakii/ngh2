@@ -525,7 +525,7 @@ class TestConnection:
 
         assert retained - before < 2 * 65_535
 
-    def test_data_frame_outgrowing_its_starting_window_is_assembled(self):
+    def test_data_frame_longer_than_the_stream_window_closes_the_connection(self):
         client = Connection(Role.CLIENT)
         server = Connection(Role.SERVER)
         client.initiate_connection()
@@ -543,58 +543,14 @@ class TestConnection:
         exchange(client, server)
         server.events()
 
-        # The frame is longer than the 1,000-byte stream window, but each piece
-        # fits because libnghttp2 reopens the window when it queues
-        # WINDOW_UPDATE, and the server sends each update before reading on.
+        # A 4,000-byte DATA header is rejected before any payload arrives.
         server.receive_data(b"\x00\x0f\xa0\x00\x01" + stream_id.to_bytes(4, "big"))
-        for _ in range(10):
-            server.receive_data(b"x" * 400)
-            server.data_to_send()
+        server.data_to_send()
 
         events = server.events()
-        assert [
-            (event.stream_id, event.data, event.end_stream)
-            for event in events
-            if isinstance(event, DataReceived)
-        ] == [(stream_id, b"x" * 4_000, True)]
-        assert not any(isinstance(event, ConnectionClosed) for event in events)
-
-    def test_data_frame_growth_reserves_in_proportion_to_received_bytes(self):
-        client = Connection(Role.CLIENT)
-        server = Connection(Role.SERVER)
-        client.initiate_connection()
-        server.initiate_connection(
-            {Setting.INITIAL_WINDOW_SIZE: 1_000, Setting.MAX_FRAME_SIZE: 16_777_215},
-        )
-        exchange(client, server)
-        exchange(server, client)
-        stream_id = client.send_request(
-            [
-                (b":method", b"POST"),
-                (b":scheme", b"https"),
-                (b":authority", b"example.test"),
-                (b":path", b"/upload"),
-            ],
-        )
-        exchange(client, server)
-        server.events()
-
-        already_tracing = tracemalloc.is_tracing()
-        if not already_tracing:
-            tracemalloc.start()
-        try:
-            before, _ = tracemalloc.get_traced_memory()
-            # A 16 MiB DATA header, then 1,200 bytes past the reopened window.
-            server.receive_data(b"\xff\xff\xff\x00\x00" + stream_id.to_bytes(4, "big"))
-            for _ in range(3):
-                server.receive_data(b"x" * 400)
-                server.data_to_send()
-            retained, _ = tracemalloc.get_traced_memory()
-        finally:
-            if not already_tracing:
-                tracemalloc.stop()
-
-        assert retained - before < 65_535
+        assert not any(isinstance(event, DataReceived) for event in events)
+        closed = next(event for event in events if isinstance(event, ConnectionClosed))
+        assert closed.error_code == ErrorCode.FLOW_CONTROL_ERROR
 
     def test_peer_rejects_an_invalid_outbound_message_block(self):
         client = Connection(Role.CLIENT)

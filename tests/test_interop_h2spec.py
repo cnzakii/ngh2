@@ -21,7 +21,7 @@ EXPECTED_FAILURES = {
     "http2/5.1/12": "RFC 9113 section 5.1 allows ignoring frames on closed streams",
     "http2/5.1.1/2": "libnghttp2 cannot tell a lower stream ID from a closed one",
     "http2/5.3.1/2": "RFC 9113 removed the stream self-dependency rule",
-    "http2/6.3/1": "libnghttp2 v1.70.0 ignores PRIORITY on stream 0",
+    "http2/6.3/1": "libnghttp2 v1.71.0 ignores PRIORITY on stream 0",
     "http2/6.9.1/3": "RFC 9113 section 5.4.1 allows a connection error instead",
 }
 # The adapter may respond before h2spec's follow-up frame arrives, closing the

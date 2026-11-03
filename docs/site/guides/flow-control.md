@@ -146,9 +146,9 @@ config = ngh2.Configuration(max_send_data_frame_size=1_048_576)
 Receive windows still bound how much DATA is in flight, so raise them with
 `set_local_window_size()` as well. Larger frames reduce per-frame work but
 interleave concurrent streams less finely. While a frame arrives, the receiver
-holds one buffer per connection. It starts no larger than the receive window,
-and if window updates admit more of the frame, it can grow up to the advertised
-`MAX_FRAME_SIZE`.
+holds one buffer per connection, sized to the frame. A frame that does not fit
+the receive windows closes the connection with `FLOW_CONTROL_ERROR` before any
+of it is buffered.
 
 ## Keep reading while a sender is blocked
 
