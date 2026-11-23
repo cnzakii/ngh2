@@ -354,6 +354,15 @@ def machine_name() -> str:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
+    # On Linux, platform.processor() names only the architecture.
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as cpuinfo:
+            for line in cpuinfo:
+                key, _, value = line.partition(":")
+                if key.strip() == "model name" and value.strip():
+                    return value.strip()
+    except OSError:
+        pass
     return platform.processor() or platform.machine()
 
 

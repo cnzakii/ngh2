@@ -26,7 +26,7 @@ calls into bytes to send; your code decides how and when those bytes move.
 
 ## Why ngh2
 
-- **Fast.** ngh2 completes HTTP/2 exchanges up to 30× faster than the
+- **Fast.** ngh2 completes HTTP/2 exchanges up to 29.4× faster than the
   pure-Python [h2](https://h2.readthedocs.io/). See
   [every measured scenario](https://github.com/cnzakii/ngh2#performance).
 - **Proven protocol engine.** Framing, HPACK, flow control, and protocol
@@ -134,17 +134,17 @@ it.
 <!-- benchmark-table:start -->
 | Scenario | ngh2 | h2 4.4.1 | ngh2 speedup |
 | --- | ---: | ---: | ---: |
-| 1 request · no body | 2.52 µs | 64.42 µs | 25.5× |
-| 1 request · 10 B upload | 3.26 µs | 82.56 µs | 25.3× |
-| 1 request · 100 KiB upload | 13.46 µs | 246.22 µs | 18.3× |
-| 10 concurrent requests · no body | 16.77 µs | 495.19 µs | 29.5× |
-| 10 concurrent · 10 MiB upload each · max window | 17.64 ms | 126.28 ms | 7.2× |
-| 10 concurrent · 100 writes of 10 KiB upload each | 924.86 µs | 18.75 ms | 20.3× |
-| 10 concurrent · 100 writes of 10 KiB upload each · max window | 1.44 ms | 14.44 ms | 10.0× |
-| 10 concurrent · 1 MiB download each · max window | 1.40 ms | 13.16 ms | 9.4× |
-| 10 concurrent · 10 MiB download each · max window | 17.56 ms | 125.88 ms | 7.2× |
+| 1 request · no body | 8.36 µs | 167.62 µs | 20.1× |
+| 1 request · 10 B upload | 11.09 µs | 212.02 µs | 19.1× |
+| 1 request · 100 KiB upload | 31.30 µs | 607.35 µs | 19.4× |
+| 10 concurrent requests · no body | 50.01 µs | 1.47 ms | 29.4× |
+| 10 concurrent · 10 MiB upload each · max window | 78.83 ms | 365.40 ms | 4.6× |
+| 10 concurrent · 100 writes of 10 KiB upload each | 2.40 ms | 47.97 ms | 20.0× |
+| 10 concurrent · 100 writes of 10 KiB upload each · max window | 7.61 ms | 34.42 ms | 4.5× |
+| 10 concurrent · 1 MiB download each · max window | 6.42 ms | 29.84 ms | 4.7× |
+| 10 concurrent · 10 MiB download each · max window | 73.65 ms | 361.80 ms | 4.9× |
 
-_Environment: ngh2 0.5.0 · h2 4.4.1 · CPython 3.13.12 (64-bit) · Apple M4 · macOS-27.2-arm64-arm-64bit-Mach-O · 2026-11-02_
+_Environment: ngh2 0.6.0 · h2 4.4.1 · CPython 3.13.12 (64-bit) · Intel(R) Xeon(R) Platinum 8336C CPU @ 2.30GHz · Linux x86_64 · 2026-11-23_
 <!-- benchmark-table:end -->
 
 These are protocol-layer measurements. They exclude sockets, TLS, event-loop

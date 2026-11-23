@@ -4,6 +4,8 @@ User-visible changes to ngh2 are recorded here.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-23
+
 ### Changed
 
 - Updated the vendored libnghttp2 dependency to v1.71.0.
