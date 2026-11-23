@@ -62,10 +62,6 @@ installed:
 uv run --locked pytest -m h2spec
 ```
 
-Add or update tests for observable behavior changes. Keep public exports, type
-stubs, documentation, and native behavior synchronized. Include reproducible
-measurements for performance claims.
-
 The coverage job traces the Cython extension and fails below 95.9% line
 coverage. Keep behavior tests focused on observable results rather than
 forcing impossible internal states to reach every line. Allocation-failure
@@ -75,6 +71,48 @@ gate correctness where CPython provides `_testcapi`, but their child-process
 execution is not included in the coverage percentage. Remaining gaps include
 native allocation failures, rare error translations, and internal consistency
 guards.
+
+## Code Conventions
+
+### Scope
+
+- Back protocol and libnghttp2 claims with RFCs, official documentation, or
+  pinned source, and cite them in the pull request. Treat mature
+  implementations such as hyper-h2 as observed practice, not authority.
+- Follow the trade-offs libnghttp2 makes deliberately. When it misses an RFC
+  rule it could fix, do not work around it in the binding: record the rule as
+  a strict expected failure in `tests/test_upstream.py` and in the table in
+  `tests/interop/README.md`.
+- Prefer the standard library and existing dependencies. Add a dependency
+  only for a current need.
+- Before 1.0, an incorrect design is replaced directly, without compatibility
+  aliases or shims.
+
+### Boundaries
+
+- Validate protocol ranges, ownership, and C conversion boundaries where
+  values enter from the caller. Do not add checks that only restate type hints
+  unless they stabilize a public error contract.
+- Treat callback pointers and borrowed native buffers as callback-scoped
+  unless the upstream API explicitly guarantees a longer lifetime. Comment
+  ownership and callback lifetimes where they are not obvious.
+
+### Naming and Style
+
+- Public names and docstrings follow Python conventions and describe HTTP/2
+  behavior rather than C binding mechanics.
+- When a Python contract changes, update runtime behavior, public exports,
+  `.pyi` stubs, documentation, and tests together.
+- Ruff and ty do not read Cython source. Binding changes must also pass
+  `cython-lint`, compile, and run the relevant tests.
+
+### Tests
+
+- Add the smallest test that fails when the changed behavior breaks. Use
+  behavior tests for documented results, hyper-h2 or h2spec interoperability
+  for bytes on the wire, and reproducible measurements for performance claims.
+- Do not add tests that only restate constants, types, or implementation
+  spelling.
 
 ## Performance measurements
 
@@ -118,6 +156,12 @@ uv run --locked pytest benchmarks/test_codspeed.py --codspeed
 Keep the documented learning path in protocol order: first exchange, protocol
 model, multiplexing, complete messages, transport integration, flow control,
 event handling, recovery, then optional controls.
+
+The README, runnable examples, and `docs/site` are coordinated entry points;
+reuse the canonical example source instead of maintaining copies. Keep
+tutorials progressive and connected, guides task-oriented, and the API
+reference complete and neutral. Explain what the user does, why, and what they
+observe, without binding internals that do not change how ngh2 is used.
 
 Examples are standalone teaching programs. Explain important protocol phases
 and ownership decisions with comments, show the observable result in the
