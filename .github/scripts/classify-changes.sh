@@ -24,7 +24,7 @@ classify() {
             docs/griffe_runtime_docstrings.py | examples/python/*)
                 code=true
                 ;;
-            .agents/* | .github/dependabot.yml | \
+            .github/dependabot.yml | \
             .github/ISSUE_TEMPLATE/* | .readthedocs.yaml | \
             .github/pull_request_template.md | \
             CODE_OF_CONDUCT.md | docs/* | zensical.toml | *.md | LICENSE*)
@@ -51,8 +51,6 @@ docs=false"
     test "$(printf '%s\n' .github/ISSUE_TEMPLATE/01-bug-report.yml | classify)" = "code=false
 docs=false"
     test "$(printf '%s\n' .github/dependabot.yml | classify)" = "code=false
-docs=false"
-    test "$(printf '%s\n' docs/knowledge/tooling/zensical.md | classify)" = "code=false
 docs=false"
     test "$(printf '%s\n' docs/site/index.md | classify)" = "code=false
 docs=true"
