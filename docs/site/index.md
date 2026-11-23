@@ -37,7 +37,7 @@ calls into bytes to send; your code decides how and when those bytes move.
 
 ### Fast
 
-ngh2 completes HTTP/2 exchanges up to 30× faster than the pure-Python
+ngh2 completes HTTP/2 exchanges up to 29.4× faster than the pure-Python
 [h2](https://h2.readthedocs.io/). Every measured scenario is listed below.
 
 </div>
